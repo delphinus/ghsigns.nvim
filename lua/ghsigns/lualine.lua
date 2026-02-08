@@ -28,11 +28,12 @@ Lualine.component = function()
     end)
     local git = ghsigns:get(bufnr)
     if git and git.revision then
+      local revision = git.revision:gsub("^origin/", "")
       return table.concat({
         hl.icon .. "",
         hl.head .. git.head,
         hl.arrow .. "←",
-        hl.base .. git.revision,
+        hl.base .. revision,
       }, " ")
     elseif git then
       return table.concat({

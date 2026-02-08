@@ -37,11 +37,11 @@ end
 ---@param revision string
 ---@param baseRefName? string
 function Gitsigns:change_base(revision, baseRefName)
-  if not baseRefName or revision == baseRefName then
+  if not baseRefName or revision == "origin/" .. baseRefName then
     return
   end
   vim.schedule_wrap(vim.api.nvim_buf_call)(self.bufnr, function()
-    require("gitsigns.actions").change_base(baseRefName, nil, function(err)
+    require("gitsigns.actions").change_base("origin/" .. baseRefName, nil, function(err)
       if err then
         vim.notify("ghsigns: failed to change base: " .. err, vim.log.levels.ERROR)
       end
