@@ -128,7 +128,7 @@ function Ghsigns:show_warning(bufnr, err)
   vim.schedule(function()
     vim.b[bufnr].ghsigns_errors = vim.b[bufnr].ghsigns_errors or {}
     local ghsigns_errors = vim.b[bufnr].ghsigns_errors
-    if err:match "no pull request found for branch" then
+    if err:match "no pull requests found for branch" then
       return
     elseif err:match "No default remote repository has been set" then
       if not ghsigns_errors.NO_DEFAULT_REMOTE_REPOSITORY then
