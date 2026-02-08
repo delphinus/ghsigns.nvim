@@ -52,6 +52,7 @@ local Gh = {}
 ---@field url string
 
 ---@param bin? string
+---@return Ghsigns.Gh
 Gh.new = function(bin)
   return setmetatable({
     bin = bin or "gh",
