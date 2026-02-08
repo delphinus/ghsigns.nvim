@@ -8,6 +8,7 @@ Lualine.component = function()
   local M = lualine_require.require("lualine.component"):extend()
 
   function M:init(options)
+    options = vim.tbl_extend("force", { on_click = Lualine.on_click }, options or {})
     M.super.init(self, options)
     self.highlights = {
       arrow = self:create_hl(colors.arrow, "arrow"),
@@ -18,15 +19,11 @@ Lualine.component = function()
   end
 
   function M:update_status()
-    local bufnr = vim.api.nvim_get_current_buf()
-    if not ghsigns.enabled then
-      return ""
-    end
     local hl = vim.iter(self.highlights):fold({}, function(a, k, v)
       a[k] = self:format_hl(v)
       return a
     end)
-    local git = ghsigns:get(bufnr)
+    local git = Lualine.get_info()
     if git and git.revision then
       local revision = git.revision:gsub("^origin/", "")
       return table.concat({
@@ -45,6 +42,30 @@ Lualine.component = function()
   end
 
   return M
+end
+
+---@return Ghsigns.GitInfo?
+---@return Ghsigns.Pr?
+Lualine.get_info = function()
+  local ghsigns = require("ghsigns").ghsigns
+  if not ghsigns.enabled then
+    return
+  end
+  return ghsigns:get(vim.api.nvim_get_current_buf())
+end
+
+---@param clicks integer
+Lualine.on_click = function(clicks)
+  if clicks ~= 2 then
+    return
+  end
+  local _, pr = Lualine.get_info()
+  if pr and pr.url then
+    vim.notify("opening PR: " .. pr.url)
+    vim.ui.open(pr.url)
+  else
+    vim.notify "no PR found for this buffer"
+  end
 end
 
 return Lualine
