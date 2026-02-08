@@ -109,8 +109,8 @@ function Ghsigns:setup_autocmd()
         .run(function()
           local err, fetched = self.gh:fetch_pr(git_info.root)
           if err then
-            self:show_warning(bufnr, err)
             self.cache:set(git_info)
+            self:show_warning(bufnr, err)
           elseif fetched then
             self.cache:set(git_info, fetched)
             gs:change_base(git_info.revision, fetched.baseRefName)
