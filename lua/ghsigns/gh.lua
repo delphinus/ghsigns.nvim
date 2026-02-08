@@ -118,6 +118,7 @@ end
 ---@return string? err
 ---@return Ghsigns.Pr? pr
 function Gh:fetch_pr(root)
+  vim.notify("gsigns: Fetching PR info...", vim.log.levels.DEBUG)
   local async = require "gitsigns.async"
   ---@type async fun(cmd: string[], opts?: vim.SystemOpts): vim.SystemCompleted
   local asystem = async.wrap(3, vim.system)

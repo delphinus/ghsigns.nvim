@@ -133,7 +133,7 @@ function Ghsigns:show_warning(bufnr, err)
     elseif err:match "No default remote repository has been set" then
       if not ghsigns_errors.NO_DEFAULT_REMOTE_REPOSITORY then
         ghsigns_errors.NO_DEFAULT_REMOTE_REPOSITORY = true
-        vim.notify("ghsigns: " .. err, vim.log.levels.WARN)
+        vim.notify("ghsigns: " .. err, vim.log.levels.DEBUG)
       end
       return
     end
