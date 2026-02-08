@@ -83,6 +83,8 @@ end
 
 ---@return nil
 function Ghsigns:setup_autocmd()
+  local async = require "gitsigns.async"
+  local semaphore = async.semaphore(1)
   vim.api.nvim_create_autocmd("User", {
     group = self.augroup,
     pattern = { "GitSignsUpdate" },
@@ -99,23 +101,26 @@ function Ghsigns:setup_autocmd()
       if not git_info then
         return
       end
-      local pr = self.cache:get(git_info)
-      if pr then
-        gs:change_base(git_info.revision, pr.baseRefName)
-        return
-      end
-      local async = require "gitsigns.async"
       async
         .run(function()
-          local err, fetched = self.gh:fetch_pr(git_info.root)
-          if err then
-            self.cache:set(git_info)
-            self:show_warning(bufnr, err)
-          elseif fetched then
-            self.cache:set(git_info, fetched)
-            gs:change_base(git_info.revision, fetched.baseRefName)
+          semaphore:with(function()
+            local pr = self.cache:get(git_info)
+            if pr then
+              gs:change_base(git_info.revision, pr.baseRefName)
+              ---@diagnostic disable-next-line: missing-return-value
+              return
+            end
+            local err, fetched = self.gh:fetch_pr(git_info.root)
+            if err then
+              self.cache:set(git_info)
+              self:show_warning(bufnr, err)
+            elseif fetched then
+              self.cache:set(git_info, fetched)
+              gs:change_base(git_info.revision, fetched.baseRefName)
+              ---@diagnostic disable-next-line: missing-return
+            end
             ---@diagnostic disable-next-line: missing-return
-          end
+          end)
         end)
         :raise_on_error()
     end,
