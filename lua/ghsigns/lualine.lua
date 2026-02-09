@@ -23,14 +23,14 @@ Lualine.component = function()
       a[k] = self:format_hl(v)
       return a
     end)
-    local git = Lualine.get_info()
-    if git and git.revision then
+    local git, pr = Lualine.get_info()
+    if git and git.revision and pr then
       local revision = git.revision:gsub("^origin/", "")
       return table.concat({
         hl.icon .. "",
         hl.head .. git.head,
         hl.arrow .. "←",
-        hl.base .. revision,
+        ("%s%s #%d"):format(hl.base, revision, pr.number),
       }, " ")
     elseif git then
       return table.concat({
