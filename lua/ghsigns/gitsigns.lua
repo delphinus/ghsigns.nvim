@@ -43,7 +43,11 @@ function Gitsigns:change_base(revision, baseRefName)
   vim.schedule_wrap(vim.api.nvim_buf_call)(self.bufnr, function()
     require("gitsigns.actions").change_base("origin/" .. baseRefName, nil, function(err)
       if err then
-        vim.notify("ghsigns: failed to change base: " .. err, vim.log.levels.ERROR)
+        if err:match("not found in origin/" .. baseRefName) then
+          vim.notify("ghsigns: not found this file in " .. baseRefName, vim.log.levels.DEBUG)
+        else
+          vim.notify("ghsigns: failed to change base: " .. err, vim.log.levels.ERROR)
+        end
       end
     end)
   end)
