@@ -138,6 +138,36 @@ The Lualine component displays:
 
 Contributions and feature requests are welcome!
 
+## Development / Testing
+
+This plugin includes comprehensive test suites using [plenary.nvim](https://github.com/nvim-lua/plenary.nvim).
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Run markdown rendering tests only
+make test-markdown
+
+# Run lualine module tests only
+make test-lualine
+```
+
+### Test Coverage
+
+- **Markdown Rendering** (`tests/markdown_spec.lua`): Tests for the markdown parser that handles PR descriptions
+  - Headings, links, bold text, inline code
+  - Issue/PR references (#123)
+  - List items
+  - CR character handling
+
+- **Lualine Module** (`tests/lualine_spec.lua`): Tests for the lualine component and PR display
+  - Click handlers (single/double click)
+  - Floating window creation and management
+  - PR information display
+
 ## License
 
 MIT
@@ -281,6 +311,36 @@ Lualine コンポーネントの表示：
 - [ ] Floating Window の内容とレイアウトをカスタマイズ可能に
 
 コントリビューションや機能リクエストを歓迎します！
+
+## 開発 / テスト
+
+このプラグインには [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) を使用した包括的なテストスイートが含まれています。
+
+### テストの実行
+
+```bash
+# すべてのテストを実行
+make test
+
+# Markdown レンダリングのテストのみ実行
+make test-markdown
+
+# Lualine モジュールのテストのみ実行
+make test-lualine
+```
+
+### テストカバレッジ
+
+- **Markdown レンダリング** (`tests/markdown_spec.lua`): PR 説明文を処理する Markdown パーサーのテスト
+  - 見出し、リンク、太字、インラインコード
+  - Issue/PR 参照 (#123)
+  - リスト項目
+  - CR 文字の処理
+
+- **Lualine モジュール** (`tests/lualine_spec.lua`): Lualine コンポーネントと PR 表示のテスト
+  - クリックハンドラー（シングル/ダブルクリック）
+  - フローティングウィンドウの作成と管理
+  - PR 情報の表示
 
 ## ライセンス
 
