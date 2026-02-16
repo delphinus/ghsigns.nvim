@@ -312,35 +312,35 @@ Lualine コンポーネントの表示：
 
 コントリビューションや機能リクエストを歓迎します！
 
-## Development / Testing
+## 開発 / テスト
 
-This plugin includes comprehensive test suites using [plenary.nvim](https://github.com/nvim-lua/plenary.nvim).
+このプラグインには [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) を使用した包括的なテストスイートが含まれています。
 
-### Running Tests
+### テストの実行
 
 ```bash
-# Run all tests
+# すべてのテストを実行
 make test
 
-# Run markdown rendering tests only
+# Markdown レンダリングのテストのみ実行
 make test-markdown
 
-# Run lualine module tests only
+# Lualine モジュールのテストのみ実行
 make test-lualine
 ```
 
-### Test Coverage
+### テストカバレッジ
 
-- **Markdown Rendering** (`tests/markdown_spec.lua`): Tests for the markdown parser that handles PR descriptions
-  - Headings, links, bold text, inline code
-  - Issue/PR references (#123)
-  - List items
-  - CR character handling
+- **Markdown レンダリング** (`tests/markdown_spec.lua`): PR 説明文を処理する Markdown パーサーのテスト
+  - 見出し、リンク、太字、インラインコード
+  - Issue/PR 参照 (#123)
+  - リスト項目
+  - CR 文字の処理
 
-- **Lualine Module** (`tests/lualine_spec.lua`): Tests for the lualine component and PR display
-  - Click handlers (single/double click)
-  - Floating window creation and management
-  - PR information display
+- **Lualine モジュール** (`tests/lualine_spec.lua`): Lualine コンポーネントと PR 表示のテスト
+  - クリックハンドラー（シングル/ダブルクリック）
+  - フローティングウィンドウの作成と管理
+  - PR 情報の表示
 
 ## ライセンス
 
