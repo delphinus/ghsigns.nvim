@@ -54,18 +54,54 @@ Lualine.get_info = function()
   return ghsigns:get(vim.api.nvim_get_current_buf())
 end
 
+local click_count = 0
+
 ---@param clicks integer
 Lualine.on_click = function(clicks)
-  if clicks ~= 2 then
+  if clicks > 2 then
     return
   end
   local _, pr = Lualine.get_info()
   if pr and pr.url then
-    vim.notify("opening PR: " .. pr.url)
-    vim.ui.open(pr.url)
+    if clicks == 1 then
+      click_count = 1
+      assert(vim.uv.new_timer()):start(300, 0, function()
+        if click_count == 1 then
+          click_count = 0
+          vim.schedule_wrap(Lualine.show_pr_info)(pr)
+        end
+      end)
+    elseif clicks == 2 then
+      click_count = 0
+      vim.notify("opening PR: " .. pr.url)
+      vim.ui.open(pr.url)
+    end
   else
     vim.notify "no PR found for this buffer"
   end
+end
+
+local pr_template = [[
+#{{ .number }} {{ .title }}
+{{ .author_name }}
+{{ .additions }}{{ .deletions }}
+state: {{ .state }}
+
+{{ .short_body }}
+
+created: {{ .createdAt }}
+updated: {{ .updatedAt }}
+]]
+
+--- @param pr Ghsigns.Pr
+Lualine.show_pr_info = function(pr)
+  local p = vim.deepcopy(pr)
+  p.author_name = p.author.name == "" and p.author.login or p.author.name
+  p.short_body = vim.trim(table.concat(vim.list_slice(vim.split(p.body, "\n"), 1, 5), "\n"))
+  local output = pr_template:gsub("{{ (.-) }}", function(key)
+    return tostring(p[key:match "^%.(.*)$"] or "")
+  end)
+  vim.notify(output)
 end
 
 return Lualine
