@@ -11,7 +11,16 @@ A Neovim plugin that integrates [gitsigns.nvim](https://github.com/lewis6991/git
 
 - Automatically fetches PR information for the current branch using GitHub CLI
 - Displays branch name and PR number in Lualine with colorful highlights
-- Double-click the Lualine component to open the PR in your browser
+- **Interactive PR information display**:
+  - Single-click the Lualine component to view detailed PR information in a floating window
+  - Double-click to open the PR in your browser
+- **Rich floating window with**:
+  - PR title, draft status, author, state, review decision, mergeable status
+  - Branch information, labels, dates (created, updated, merged)
+  - Line changes, file count, and commit count
+  - Markdown-rendered PR description with syntax highlighting
+  - Clickable links (`[text](url)` format and `#123` issue/PR references)
+  - Auto-close when clicking outside or pressing q/Esc/Enter
 - Automatically changes the diff base to the PR's base branch (using gitsigns' `change_base` feature)
 - Caches PR information for better performance
 - Asynchronous PR fetching to avoid blocking the editor
@@ -104,7 +113,13 @@ The Lualine component displays:
 - `  main` - When on a branch without a PR
 - `  feature-branch ← main #123` - When on a branch with PR #123 targeting main
 
-Double-click the component to open the PR in your browser.
+**Mouse interactions**:
+- **Single-click**: Display detailed PR information in a floating window with:
+  - Title, author, state, review status, mergeable status
+  - Changes summary with file/commit counts
+  - Labels and important dates
+  - Markdown-rendered description with clickable links
+- **Double-click**: Open the PR in your browser
 
 ## How It Works
 
@@ -117,9 +132,9 @@ Double-click the component to open the PR in your browser.
 ## TODO / Roadmap
 
 - [ ] Support for remote repositories other than `origin`
-- [ ] Display PR information in a floating window on click
 - [ ] Customizable statusline display items
 - [ ] Support for statusline plugins other than Lualine
+- [ ] Customizable floating window content and layout
 
 Contributions and feature requests are welcome!
 
@@ -140,7 +155,16 @@ MIT
 
 - GitHub CLI を使用して現在のブランチの PR 情報を自動取得
 - Lualine にブランチ名と PR 番号をカラフルに表示
-- Lualine コンポーネントをダブルクリックすると、ブラウザで PR を開く
+- **インタラクティブな PR 情報表示**:
+  - シングルクリック: Floating Window で詳細な PR 情報を表示
+  - ダブルクリック: ブラウザで PR を開く
+- **豊富な Floating Window 機能**:
+  - PR タイトル、Draft 状態、作者、状態、レビュー判定、マージ可能性
+  - ブランチ情報、ラベル、日付（作成、更新、マージ）
+  - 変更行数、ファイル数、コミット数
+  - シンタックスハイライト付き Markdown レンダリング
+  - クリック可能なリンク（`[text](url)` 形式と `#123` issue/PR 参照）
+  - 外側クリックまたは q/Esc/Enter で自動クローズ
 - PR のベースブランチに対する差分を自動表示（gitsigns の `change_base` 機能を使用）
 - PR 情報をキャッシュしてパフォーマンスを向上
 - 非同期 PR 取得でエディタをブロックしない
@@ -233,7 +257,13 @@ Lualine コンポーネントの表示：
 - `  main` - PR がないブランチの場合
 - `  feature-branch ← main #123` - main をターゲットとする PR #123 があるブランチの場合
 
-コンポーネントをダブルクリックすると、ブラウザで PR を開きます。
+**マウス操作**:
+- **シングルクリック**: Floating Window で詳細な PR 情報を表示
+  - タイトル、作者、状態、レビュー状態、マージ可能性
+  - ファイル/コミット数を含む変更サマリー
+  - ラベルと重要な日付
+  - クリック可能なリンク付き Markdown レンダリングされた説明
+- **ダブルクリック**: ブラウザで PR を開く
 
 ## 動作の仕組み
 
@@ -246,9 +276,9 @@ Lualine コンポーネントの表示：
 ## TODO / ロードマップ
 
 - [ ] `origin` 以外のリモートリポジトリへの対応
-- [ ] クリック時に PR 情報を Floating Window で表示
 - [ ] ステータスラインの表示項目をカスタマイズ可能に
 - [ ] Lualine 以外のステータスラインプラグインへの対応
+- [ ] Floating Window の内容とレイアウトをカスタマイズ可能に
 
 コントリビューションや機能リクエストを歓迎します！
 
