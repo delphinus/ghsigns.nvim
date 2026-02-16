@@ -81,27 +81,714 @@ Lualine.on_click = function(clicks)
   end
 end
 
-local pr_template = [[
-#{{ .number }} {{ .title }}
-{{ .author_name }}
-{{ .additions }}{{ .deletions }}
-state: {{ .state }}
+---@class Ghsigns.PrData: Ghsigns.Pr
+---@field author_name? string
+---@field short_body? string
 
-{{ .short_body }}
-
-created: {{ .createdAt }}
-updated: {{ .updatedAt }}
-]]
+local pr_float_win = nil
+local pr_float_autocmd = nil
 
 --- @param pr Ghsigns.Pr
 Lualine.show_pr_info = function(pr)
-  local p = vim.deepcopy(pr)
-  p.author_name = p.author.name == "" and p.author.login or p.author.name
-  p.short_body = vim.trim(table.concat(vim.list_slice(vim.split(p.body, "\n"), 1, 5), "\n"))
-  local output = pr_template:gsub("{{ (.-) }}", function(key)
-    return tostring(p[key:match "^%.(.*)$"] or "")
-  end)
-  vim.notify(output)
+  -- Close existing floating window if present
+  if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) then
+    vim.api.nvim_win_close(pr_float_win, true)
+    pr_float_win = nil
+    if pr_float_autocmd then
+      for _, id in ipairs(pr_float_autocmd) do
+        pcall(vim.api.nvim_del_autocmd, id)
+      end
+      pr_float_autocmd = nil
+    end
+    return
+  end
+  local p = vim.deepcopy(pr) --[[@as Ghsigns.PrData]]
+  if p.author then
+    p.author_name = (p.author.name and p.author.name ~= "") and p.author.name or (p.author.login or "Unknown")
+  end
+
+  -- Create a floating window
+  local buf = vim.api.nvim_create_buf(false, true)
+  local ns = vim.api.nvim_create_namespace "ghsigns_pr_info"
+
+  -- Create custom highlight group for PR title (Title + underline)
+  local title_hl = vim.api.nvim_get_hl(0, { name = "Title" })
+  title_hl.underline = true
+  vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
+
+  -- Build content with metadata for highlighting
+  local lines = {}
+  local highlights = {}
+
+  -- Helper to add a line with highlights
+  local function add_line(text, hl_groups)
+    table.insert(lines, text)
+    if hl_groups then
+      table.insert(highlights, { line = #lines - 1, groups = hl_groups })
+    end
+  end
+
+  -- Helper to add a labeled line
+  local function add_labeled(label, value, value_hl)
+    local line = label .. ": " .. value
+    add_line(line, {
+      { col = 0, end_col = #label, hl = "Comment" },
+      { col = #label + 2, end_col = #line, hl = value_hl or "Normal" },
+    })
+  end
+
+  -- Title with Draft indicator (clickable)
+  local title_prefix = (p.isDraft == true) and "[DRAFT] " or ""
+  local title_text = "#" .. (p.number or 0) .. " " .. title_prefix .. (p.title or "")
+  local number_str = tostring(p.number or 0)
+  local title_hls = {
+    { col = 0, end_col = #number_str + 1, hl = "Number" },
+  }
+  if p.isDraft == true then
+    local draft_start = #number_str + 2
+    table.insert(title_hls, { col = draft_start, end_col = draft_start + 7, hl = "WarningMsg" })
+    table.insert(title_hls, { col = draft_start + 8, end_col = -1, hl = "GhsignsPrTitle" })
+  else
+    table.insert(title_hls, { col = #number_str + 2, end_col = -1, hl = "GhsignsPrTitle" })
+  end
+  add_line(title_text, title_hls)
+
+  -- Store title line for click detection
+  local title_line = #lines - 1
+
+  -- Branches
+  if p.baseRefName and p.headRefName then
+    local branch_info = string.format("%s ← %s", p.baseRefName, p.headRefName)
+    add_line(branch_info, {
+      { col = 0, end_col = #p.baseRefName, hl = "String" },
+      { col = #p.baseRefName + 1, end_col = #p.baseRefName + 3, hl = "Operator" },
+      { col = #p.baseRefName + 4, end_col = -1, hl = "Identifier" },
+    })
+  end
+
+  add_line ""
+
+  -- Author
+  if p.author_name then
+    add_labeled("Author", p.author_name, "String")
+  end
+
+  -- State
+  if p.state then
+    local state_hl = p.state == "OPEN" and "DiagnosticOk" or "DiagnosticError"
+    add_labeled("State", p.state, state_hl)
+  end
+
+  -- Review Decision
+  if p.reviewDecision and p.reviewDecision ~= "" then
+    local review_hl = "DiagnosticWarn"
+    if p.reviewDecision == "APPROVED" then
+      review_hl = "DiagnosticOk"
+    elseif p.reviewDecision == "CHANGES_REQUESTED" then
+      review_hl = "DiagnosticError"
+    end
+    add_labeled("Review", p.reviewDecision:gsub("_", " "), review_hl)
+  end
+
+  -- Mergeable
+  if p.mergeable and p.mergeable ~= "" then
+    local merge_hl = p.mergeable == "MERGEABLE" and "DiagnosticOk" or "DiagnosticError"
+    add_labeled("Mergeable", p.mergeable, merge_hl)
+  end
+
+  -- Changes
+  local commit_count = 0
+  if p.commits then
+    if p.commits.nodes then
+      commit_count = #p.commits.nodes
+    elseif type(p.commits) == "table" then
+      commit_count = #p.commits
+    end
+  end
+  local changed_files = p.changedFiles or 0
+  local additions_str = tostring(p.additions or 0)
+  local deletions_str = tostring(p.deletions or 0)
+  local changes = string.format("+%s -%s (%d files, %d commits)",
+    additions_str, deletions_str, changed_files, commit_count)
+  local changes_start = "Changes: "
+
+  -- Calculate highlight positions: "Changes: +103 -30 (5 files, 6 commits)"
+  local plus_start = #changes_start
+  local plus_end = plus_start + 1 + #additions_str  -- "+103" = 4 chars
+  local minus_start = plus_end + 1  -- space after +103
+  local minus_end = minus_start + 1 + #deletions_str  -- "-30" = 3 chars
+
+  add_line(changes_start .. changes, {
+    { col = 0, end_col = #changes_start - 1, hl = "Comment" },
+    { col = plus_start, end_col = plus_end, hl = "DiffAdd" },
+    { col = minus_start, end_col = minus_end, hl = "DiffDelete" },
+    { col = minus_end + 1, end_col = -1, hl = "Comment" },
+  })
+
+  -- Labels
+  if p.labels and p.labels.nodes and #p.labels.nodes > 0 then
+    local label_names = vim.tbl_map(function(label) return label.name end, p.labels.nodes)
+    add_labeled("Labels", table.concat(label_names, ", "), "Tag")
+  end
+
+  add_line ""
+
+  -- Dates
+  if p.createdAt then
+    add_labeled("Created", p.createdAt, "DiagnosticHint")
+  end
+  if p.updatedAt then
+    add_labeled("Updated", p.updatedAt, "DiagnosticHint")
+  end
+  if p.mergedAt then
+    add_labeled("Merged", p.mergedAt, "DiagnosticOk")
+  end
+
+  -- Store clickable links metadata
+  local link_metadata = {}
+
+  -- Extract base repository URL from PR URL
+  local repo_base_url = nil
+  if p.url then
+    -- Extract https://github.com/owner/repo from https://github.com/owner/repo/pull/123
+    repo_base_url = p.url:match("(https://[^/]+/[^/]+/[^/]+)")
+  end
+
+  -- Helper function to render markdown to plain text and collect metadata
+  local function render_markdown(text)
+    local rendered_text = text
+    local highlights = {}
+    local links = {}
+
+    -- Remove CR characters
+    rendered_text = rendered_text:gsub("\r", "")
+
+    -- Heading (# ## ###) - remove prefix
+    local heading_content = rendered_text:match "^#+%s+(.+)$"
+    if heading_content then
+      rendered_text = heading_content
+      table.insert(highlights, { col = 0, end_col = #rendered_text, hl = "Title" })
+      return rendered_text, highlights, links, "heading"
+    end
+
+    -- List items (- * 1.) - keep the marker
+    local list_marker, list_content = rendered_text:match "^(%s*[-*]%s)(.*)$"
+    if not list_marker then
+      list_marker, list_content = rendered_text:match "^(%s*%d+%.%s)(.*)$"
+    end
+
+    -- Process inline markdown elements
+    local processed = ""
+
+    -- Links [text](url) - show only text, make it clickable (process first to avoid conflicts)
+    local i = 1
+    while i <= #rendered_text do
+      local s, e = rendered_text:find("%[([^%]]+)%]%([^%)]+%)", i)
+      if s == i then
+        local link_text = rendered_text:match("%[([^%]]+)%]%([^%)]+%)", i)
+        local url = rendered_text:match("%[[^%]]+%]%(([^%)]+)%)", i)
+        local start_col = #processed
+        processed = processed .. link_text
+        table.insert(highlights, { col = start_col, end_col = start_col + #link_text, hl = "Underlined" })
+        table.insert(links, {
+          col_start = start_col,
+          col_end = start_col + #link_text,
+          url = url,
+        })
+        i = e + 1
+      else
+        processed = processed .. rendered_text:sub(i, i)
+        i = i + 1
+      end
+    end
+    rendered_text = processed
+
+    -- Issue/PR references #123 - make them clickable (but not inside backticks)
+    if repo_base_url then
+      processed = ""
+      i = 1
+      local in_backtick = false
+      while i <= #rendered_text do
+        -- Track backticks to avoid processing #123 inside code
+        if rendered_text:sub(i, i) == "`" then
+          in_backtick = not in_backtick
+          processed = processed .. "`"
+          i = i + 1
+        else
+          local s, e = rendered_text:find("#%d+", i)
+          if s == i and not in_backtick then
+            local issue_num = rendered_text:match("#(%d+)", i)
+            local issue_text = "#" .. issue_num
+            local url = repo_base_url .. "/issues/" .. issue_num
+            local start_col = #processed
+            processed = processed .. issue_text
+            table.insert(highlights, { col = start_col, end_col = start_col + #issue_text, hl = "Underlined" })
+            table.insert(links, {
+              col_start = start_col,
+              col_end = start_col + #issue_text,
+              url = url,
+            })
+            i = e + 1
+          else
+            processed = processed .. rendered_text:sub(i, i)
+            i = i + 1
+          end
+        end
+      end
+      rendered_text = processed
+    end
+
+    -- Bold **text** - remove markers
+    processed = ""
+    i = 1
+    while i <= #rendered_text do
+      local s, e = rendered_text:find("%*%*([^*]+)%*%*", i)
+      if s == i then
+        local content = rendered_text:match("%*%*([^*]+)%*%*", i)
+        local start_col = #processed
+        processed = processed .. content
+        table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "Bold" })
+        i = e + 1
+      else
+        processed = processed .. rendered_text:sub(i, i)
+        i = i + 1
+      end
+    end
+    rendered_text = processed
+
+    -- Code `text` - remove backticks
+    processed = ""
+    i = 1
+    while i <= #rendered_text do
+      if rendered_text:sub(i, i) == "`" then
+        local e = rendered_text:find("`", i + 1)
+        if e then
+          local content = rendered_text:sub(i + 1, e - 1)
+          local start_col = #processed
+          processed = processed .. content
+          table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "String" })
+          i = e + 1
+        else
+          processed = processed .. rendered_text:sub(i, i)
+          i = i + 1
+        end
+      else
+        processed = processed .. rendered_text:sub(i, i)
+        i = i + 1
+      end
+    end
+    rendered_text = processed
+
+    -- Add list marker highlight if present
+    if list_marker then
+      table.insert(highlights, 1, { col = 0, end_col = #list_marker, hl = "Special" })
+    end
+
+    return rendered_text, highlights, links, nil
+  end
+
+  -- Helper function to add markdown line with wrapping support
+  local function add_markdown_line(text, indent, max_width)
+    indent = indent or "  "
+    max_width = max_width or 80
+
+    local rendered_text, highlights, links, special_type = render_markdown(text)
+
+    -- Wrap if necessary
+    local display_width = vim.fn.strdisplaywidth(rendered_text)
+    if display_width > max_width then
+      -- Wrap the rendered text and track positions
+      local wrapped_lines = {}
+      local line_starts = {} -- Track where each wrapped line starts in the original text
+      local current = ""
+      local current_width = 0
+      local current_start = 0
+      local char_pos = 0
+
+      -- Split into words while tracking positions
+      local words = {}
+      local word_positions = {}
+      for word in rendered_text:gmatch("%S+") do
+        local word_start = rendered_text:find(word, char_pos + 1, true)
+        table.insert(words, word)
+        table.insert(word_positions, word_start - 1) -- 0-indexed
+        char_pos = word_start + #word - 1
+      end
+
+      -- Wrap words
+      for i, word in ipairs(words) do
+        local word_width = vim.fn.strdisplaywidth(word)
+        local space_width = current == "" and 0 or 1
+
+        if current_width + space_width + word_width > max_width and current ~= "" then
+          table.insert(wrapped_lines, current)
+          table.insert(line_starts, current_start)
+          current = word
+          current_start = word_positions[i]
+          current_width = word_width
+        else
+          if current ~= "" then
+            current = current .. " " .. word
+            current_width = current_width + 1 + word_width
+          else
+            current = word
+            current_start = word_positions[i]
+            current_width = word_width
+          end
+        end
+      end
+
+      if current ~= "" then
+        table.insert(wrapped_lines, current)
+        table.insert(line_starts, current_start)
+      end
+
+      -- Add each wrapped line
+      for idx, wline in ipairs(wrapped_lines) do
+        local line_start_pos = line_starts[idx]
+
+        local line_hls = {}
+        for _, hl in ipairs(highlights) do
+          local hl_start = hl.col
+          local hl_end = hl.end_col
+          local wline_end = line_start_pos + #wline
+
+          -- Check if highlight overlaps with this wrapped line
+          if hl_end > line_start_pos and hl_start < wline_end then
+            local local_start = math.max(0, hl_start - line_start_pos)
+            local local_end = math.min(#wline, hl_end - line_start_pos)
+            table.insert(line_hls, {
+              col = local_start + #indent,
+              end_col = local_end + #indent,
+              hl = hl.hl,
+            })
+          end
+        end
+
+        add_line(indent .. wline, #line_hls > 0 and line_hls or nil)
+
+        -- Add link metadata for any wrapped line that contains a link
+        for _, link in ipairs(links) do
+          local link_start = link.col_start
+          local link_end = link.col_end
+          local wline_end = line_start_pos + #wline
+
+          -- Check if link overlaps with this wrapped line
+          if link_end > line_start_pos and link_start < wline_end then
+            local local_start = math.max(0, link_start - line_start_pos)
+            local local_end = math.min(#wline, link_end - line_start_pos)
+            table.insert(link_metadata, {
+              line = #lines - 1,
+              col_start = local_start + #indent,
+              col_end = local_end + #indent,
+              url = link.url,
+            })
+          end
+        end
+      end
+    else
+      -- No wrapping needed
+      local line_hls = {}
+      for _, hl in ipairs(highlights) do
+        table.insert(line_hls, {
+          col = hl.col + #indent,
+          end_col = hl.end_col + #indent,
+          hl = hl.hl,
+        })
+      end
+
+      add_line(indent .. rendered_text, #line_hls > 0 and line_hls or nil)
+
+      -- Add link metadata
+      for _, link in ipairs(links) do
+        table.insert(link_metadata, {
+          line = #lines - 1,
+          col_start = link.col_start + #indent,
+          col_end = link.col_end + #indent,
+          url = link.url,
+        })
+      end
+    end
+  end
+
+  -- Helper function to wrap long lines
+  local function wrap_line(text, max_width, indent)
+    local lines_out = {}
+    local current = ""
+    local current_width = 0
+
+    for word in text:gmatch("%S+") do
+      local word_width = vim.fn.strdisplaywidth(word)
+      local space_width = current == "" and 0 or 1
+
+      if current_width + space_width + word_width > max_width and current ~= "" then
+        table.insert(lines_out, indent .. current)
+        current = word
+        current_width = word_width
+      else
+        if current ~= "" then
+          current = current .. " " .. word
+          current_width = current_width + 1 + word_width
+        else
+          current = word
+          current_width = word_width
+        end
+      end
+    end
+
+    if current ~= "" then
+      table.insert(lines_out, indent .. current)
+    end
+
+    return lines_out
+  end
+
+  -- Body with markdown rendering
+  if p.body and p.body ~= "" then
+    add_line ""
+    add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
+
+    -- Normalize line endings (remove CR)
+    local normalized_body = p.body:gsub("\r\n", "\n"):gsub("\r", "\n")
+
+    -- Remove HTML comments
+    normalized_body = normalized_body:gsub("<!%-%-.-%-%->", "")
+
+    -- Remove HTML tags
+    normalized_body = normalized_body:gsub("<[^>]+>", "")
+
+    local body_lines = vim.split(normalized_body, "\n")
+
+    -- Remove consecutive blank lines
+    local cleaned_lines = {}
+    local prev_blank = false
+    for _, line in ipairs(body_lines) do
+      local is_blank = line:match("^%s*$") ~= nil
+      if not (is_blank and prev_blank) then
+        table.insert(cleaned_lines, line)
+      end
+      prev_blank = is_blank
+    end
+
+    local in_code_block = false
+    local lines_shown = 0
+    local max_lines = 15
+    local max_width = 80
+
+    for _, body_line in ipairs(cleaned_lines) do
+      local lines_before = #lines
+
+      -- Code blocks ```
+      if body_line:match "^```" then
+        in_code_block = not in_code_block
+        add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "Comment" } })
+      elseif in_code_block then
+        -- Wrap code block lines if too long
+        local display_width = vim.fn.strdisplaywidth(body_line)
+        if display_width > max_width then
+          local wrapped = wrap_line(body_line, max_width, "  ")
+          for _, wline in ipairs(wrapped) do
+            add_line(wline, { { col = 0, end_col = -1, hl = "String" } })
+          end
+        else
+          add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "String" } })
+        end
+      else
+        add_markdown_line(body_line, "  ", max_width)
+      end
+
+      -- Count lines added
+      local lines_added = #lines - lines_before
+      lines_shown = lines_shown + lines_added
+
+      -- Check if we've exceeded max lines
+      if lines_shown >= max_lines then
+        add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
+        break
+      end
+    end
+  end
+
+  -- Add close button at the bottom
+  add_line ""
+  local close_text = "✕ Click here to close (or press q/Esc/Enter)"
+  add_line(close_text, { { col = 0, end_col = 1, hl = "ErrorMsg" }, { col = 2, end_col = #close_text, hl = "Comment" } })
+  local close_line_idx = #lines - 1
+
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+  -- Calculate window size
+  local width = 0
+  for _, line in ipairs(lines) do
+    width = math.max(width, vim.fn.strdisplaywidth(line))
+  end
+  width = math.min(width + 2, math.floor(vim.o.columns * 0.8))
+  local height = math.min(#lines, math.floor(vim.o.lines * 0.8))
+
+  -- Apply highlights
+  for _, hl_info in ipairs(highlights) do
+    local line_text = lines[hl_info.line + 1]
+    if line_text then
+      for _, group in ipairs(hl_info.groups) do
+        local end_col = group.end_col
+        if end_col == -1 or end_col > #line_text then
+          end_col = #line_text
+        end
+        vim.api.nvim_buf_set_extmark(buf, ns, hl_info.line, group.col, {
+          end_col = end_col,
+          hl_group = group.hl,
+        })
+      end
+    end
+  end
+
+  -- Apply clickable links
+  for _, link in ipairs(link_metadata) do
+    vim.api.nvim_buf_set_extmark(buf, ns, link.line, link.col_start, {
+      end_col = link.col_end,
+      hl_group = "Underlined",
+      url = link.url,
+    })
+  end
+
+  -- Get mouse position
+  local mouse_pos = vim.fn.getmousepos()
+  local row = mouse_pos.screenrow
+  local col = mouse_pos.screencol
+
+  -- Calculate available space (excluding status line and command line)
+  -- vim.o.lines includes all lines (0-indexed rows from 0 to lines-1)
+  -- Border adds 2 rows (top and bottom), so total window height is height + 2
+  local total_height = height + 2 -- content + borders
+  local max_row = vim.o.lines - vim.o.cmdheight - 1 -- Last row before cmdline
+
+  -- Adjust position to avoid going off screen and overlapping with status line
+  -- Ensure the bottom of the window doesn't exceed max_row
+  if row + total_height > max_row then
+    row = math.max(0, max_row - total_height)
+  end
+  if col + width > vim.o.columns then
+    col = math.max(0, vim.o.columns - width)
+  end
+
+  -- Window options
+  local opts = {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = " PR Info ",
+    title_pos = "center",
+  }
+
+  local win = vim.api.nvim_open_win(buf, false, opts)
+  pr_float_win = win
+
+  -- Set window options
+  vim.api.nvim_set_option_value("wrap", true, { win = win })
+  vim.api.nvim_set_option_value("cursorline", true, { win = win })
+  vim.wo[win].statusline = " " -- Hide status line in floating window
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
+
+  -- Key mappings to close the window
+  local close_keys = { "q", "<Esc>", "<CR>" }
+  for _, key in ipairs(close_keys) do
+    vim.api.nvim_buf_set_keymap(buf, "n", key, ":close<CR>", { noremap = true, silent = true })
+  end
+
+  -- Mouse click anywhere in the buffer to detect clicks on close button, title, and links
+  vim.keymap.set("n", "<LeftRelease>", function()
+    -- Get the mouse click position
+    local mouse = vim.fn.getmousepos()
+    if mouse.winid == win then
+      local click_line = mouse.line
+      local click_col = mouse.column
+
+      -- Check if close button was clicked
+      if click_line == close_line_idx + 1 then -- 1-indexed
+        if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) then
+          vim.api.nvim_win_close(pr_float_win, true)
+          pr_float_win = nil
+          if pr_float_autocmd then
+            for _, id in ipairs(pr_float_autocmd) do
+              pcall(vim.api.nvim_del_autocmd, id)
+            end
+            pr_float_autocmd = nil
+          end
+        end
+        return
+      end
+
+      -- Check if title line was clicked
+      if click_line == title_line + 1 and p.url then -- 1-indexed
+        vim.notify("Opening PR: " .. p.url, vim.log.levels.INFO)
+        vim.ui.open(p.url)
+        return
+      end
+
+      -- Check if a link was clicked
+      for _, link in ipairs(link_metadata) do
+        -- Debug: uncomment to see link regions
+        -- vim.notify(string.format("Link: line=%d, col=%d-%d, url=%s", link.line, link.col_start, link.col_end, link.url))
+
+        if link.line == click_line - 1 and click_col >= link.col_start + 1 and click_col < link.col_end + 1 then
+          vim.notify("Opening: " .. link.url, vim.log.levels.INFO)
+          vim.ui.open(link.url)
+          return
+        end
+      end
+    end
+  end, { buffer = buf, noremap = true, silent = true })
+
+  -- Auto-close when clicking or entering any other window
+  local augroup = vim.api.nvim_create_augroup("ghsigns_pr_float", { clear = false })
+
+  -- Function to check and close floating window
+  local function close_if_not_float()
+    local current_win = vim.api.nvim_get_current_win()
+    if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) and current_win ~= pr_float_win then
+      vim.api.nvim_win_close(pr_float_win, true)
+      pr_float_win = nil
+      if pr_float_autocmd then
+        for _, id in ipairs(pr_float_autocmd) do
+          pcall(vim.api.nvim_del_autocmd, id)
+        end
+        pr_float_autocmd = nil
+      end
+    end
+  end
+
+  -- Close when entering any window or when cursor moves (including mouse clicks)
+  pr_float_autocmd = {
+    vim.api.nvim_create_autocmd("WinEnter", {
+      group = augroup,
+      callback = close_if_not_float,
+    }),
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      group = augroup,
+      callback = close_if_not_float,
+    }),
+  }
+
+  -- Clean up when window is closed manually
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = augroup,
+    pattern = tostring(win),
+    once = true,
+    callback = function()
+      pr_float_win = nil
+      if pr_float_autocmd then
+        for _, id in ipairs(pr_float_autocmd) do
+          pcall(vim.api.nvim_del_autocmd, id)
+        end
+        pr_float_autocmd = nil
+      end
+    end,
+  })
 end
 
 return Lualine
