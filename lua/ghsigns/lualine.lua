@@ -81,25 +81,55 @@ Lualine.on_click = function(clicks)
   end
 end
 
+---@class Ghsigns.FloatWin
+---@field private augroup string
+---@field private win? integer
+local FloatWin = {}
+
+FloatWin.new = function()
+  return setmetatable({ augroup = "ghsigns_pr_float" }, { __index = FloatWin })
+end
+
+function FloatWin:setup(win)
+  self.win = win
+  vim.api.nvim_create_autocmd({ "WinEnter", "CursorMoved" }, {
+    group = vim.api.nvim_create_augroup(self.augroup, { clear = false }),
+    callback = function()
+      if self.win ~= vim.api.nvim_get_current_win() then
+        self:close_if_valid()
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = vim.api.nvim_create_augroup(self.augroup, { clear = false }),
+    pattern = tostring(win),
+    once = true,
+    callback = function()
+      self:close_if_valid()
+    end,
+  })
+end
+
+---@return boolean
+function FloatWin:close_if_valid()
+  if self.win and vim.api.nvim_win_is_valid(self.win) then
+    vim.api.nvim_win_close(self.win, true)
+    pcall(vim.api.nvim_del_augroup_by_name, self.augroup)
+    return true
+  end
+  return false
+end
+
+local float_win = FloatWin.new()
+
 ---@class Ghsigns.PrData: Ghsigns.Pr
 ---@field author_name? string
 ---@field short_body? string
 
-local pr_float_win = nil
-local pr_float_autocmd = nil
-
 --- @param pr Ghsigns.Pr
 Lualine.show_pr_info = function(pr)
   -- Close existing floating window if present
-  if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) then
-    vim.api.nvim_win_close(pr_float_win, true)
-    pr_float_win = nil
-    if pr_float_autocmd then
-      for _, id in ipairs(pr_float_autocmd) do
-        pcall(vim.api.nvim_del_autocmd, id)
-      end
-      pr_float_autocmd = nil
-    end
+  if float_win:close_if_valid() then
     return
   end
   local p = vim.deepcopy(pr) --[[@as Ghsigns.PrData]]
@@ -560,7 +590,7 @@ Lualine.show_pr_info = function(pr)
   }
 
   local win = vim.api.nvim_open_win(buf, false, opts)
-  pr_float_win = win
+  float_win:setup(win)
 
   -- Set window options
   vim.api.nvim_set_option_value("wrap", true, { win = win })
@@ -585,16 +615,7 @@ Lualine.show_pr_info = function(pr)
 
       -- Check if close button was clicked
       if click_line == close_line_idx + 1 then -- 1-indexed
-        if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) then
-          vim.api.nvim_win_close(pr_float_win, true)
-          pr_float_win = nil
-          if pr_float_autocmd then
-            for _, id in ipairs(pr_float_autocmd) do
-              pcall(vim.api.nvim_del_autocmd, id)
-            end
-            pr_float_autocmd = nil
-          end
-        end
+        float_win:close_if_valid()
         return
       end
 
@@ -618,52 +639,6 @@ Lualine.show_pr_info = function(pr)
       end
     end
   end, { buffer = buf, noremap = true, silent = true })
-
-  -- Auto-close when clicking or entering any other window
-  local augroup = vim.api.nvim_create_augroup("ghsigns_pr_float", { clear = false })
-
-  -- Function to check and close floating window
-  local function close_if_not_float()
-    local current_win = vim.api.nvim_get_current_win()
-    if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) and current_win ~= pr_float_win then
-      vim.api.nvim_win_close(pr_float_win, true)
-      pr_float_win = nil
-      if pr_float_autocmd then
-        for _, id in ipairs(pr_float_autocmd) do
-          pcall(vim.api.nvim_del_autocmd, id)
-        end
-        pr_float_autocmd = nil
-      end
-    end
-  end
-
-  -- Close when entering any window or when cursor moves (including mouse clicks)
-  pr_float_autocmd = {
-    vim.api.nvim_create_autocmd("WinEnter", {
-      group = augroup,
-      callback = close_if_not_float,
-    }),
-    vim.api.nvim_create_autocmd("CursorMoved", {
-      group = augroup,
-      callback = close_if_not_float,
-    }),
-  }
-
-  -- Clean up when window is closed manually
-  vim.api.nvim_create_autocmd("WinClosed", {
-    group = augroup,
-    pattern = tostring(win),
-    once = true,
-    callback = function()
-      pr_float_win = nil
-      if pr_float_autocmd then
-        for _, id in ipairs(pr_float_autocmd) do
-          pcall(vim.api.nvim_del_autocmd, id)
-        end
-        pr_float_autocmd = nil
-      end
-    end,
-  })
 end
 
 return Lualine
