@@ -66,7 +66,7 @@ describe("Lualine module", function()
       lualine.get_info = original_get_info
 
       eq(1, #notifications)
-      assert.is_true(notifications[1].msg:find("no PR found") ~= nil)
+      assert.is_true(notifications[1].msg:find "No PR information" ~= nil)
     end)
 
     it("should open URL on double click", function()
@@ -197,14 +197,14 @@ describe("Lualine module", function()
           local content = table.concat(lines, "\n")
 
           -- Check if it contains PR information
-          if content:find("Test PR Title") and content:find("Test User") then
+          if content:find "Test PR Title" and content:find "Test User" then
             found_content = true
             -- Verify some key elements
-            assert.is_true(content:find("123") ~= nil) -- PR number
-            assert.is_true(content:find("main") ~= nil) -- base branch
-            assert.is_true(content:find("feature") ~= nil) -- head branch
-            assert.is_true(content:find("OPEN") ~= nil) -- state
-            assert.is_true(content:find("Test PR body") ~= nil) -- body
+            assert.is_true(content:find "123" ~= nil) -- PR number
+            assert.is_true(content:find "main" ~= nil) -- base branch
+            assert.is_true(content:find "feature" ~= nil) -- head branch
+            assert.is_true(content:find "OPEN" ~= nil) -- state
+            assert.is_true(content:find "Test PR body" ~= nil) -- body
             break
           end
         end
@@ -235,7 +235,7 @@ describe("Lualine module", function()
           local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
           local content = table.concat(lines, "\n")
 
-          if content:find("DRAFT") then
+          if content:find "DRAFT" then
             found_draft = true
             break
           end

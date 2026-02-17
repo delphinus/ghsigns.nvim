@@ -54,7 +54,7 @@ Lualine.get_info = function()
   return ghsigns:get(vim.api.nvim_get_current_buf())
 end
 
-local click_count = 0
+local wait_double_click = false
 
 ---@param clicks integer
 Lualine.on_click = function(clicks)
@@ -62,44 +62,74 @@ Lualine.on_click = function(clicks)
     return
   end
   local _, pr = Lualine.get_info()
-  if pr and pr.url then
-    if clicks == 1 then
-      click_count = 1
-      assert(vim.uv.new_timer()):start(300, 0, function()
-        if click_count == 1 then
-          click_count = 0
-          vim.schedule_wrap(Lualine.show_pr_info)(pr)
-        end
-      end)
-    elseif clicks == 2 then
-      click_count = 0
-      vim.notify("opening PR: " .. pr.url)
-      vim.ui.open(pr.url)
-    end
-  else
-    vim.notify "no PR found for this buffer"
+  if not pr or not pr.url then
+    vim.notify "No PR information available for this buffer"
+    return
+  end
+  if clicks == 1 then
+    wait_double_click = true
+    assert(vim.uv.new_timer()):start(300, 0, function()
+      if wait_double_click then
+        wait_double_click = false
+        vim.schedule_wrap(Lualine.show_pr_info)(pr)
+      end
+    end)
+  elseif clicks == 2 then
+    wait_double_click = false
+    vim.notify("opening PR: " .. pr.url)
+    vim.ui.open(pr.url)
   end
 end
+
+---@class Ghsigns.FloatWin
+---@field private augroup string
+---@field private win? integer
+local FloatWin = {}
+
+FloatWin.new = function()
+  return setmetatable({ augroup = "ghsigns_pr_float" }, { __index = FloatWin })
+end
+
+function FloatWin:setup(win)
+  self.win = win
+  vim.api.nvim_create_autocmd({ "WinEnter", "CursorMoved" }, {
+    group = vim.api.nvim_create_augroup(self.augroup, { clear = false }),
+    callback = function()
+      if self.win ~= vim.api.nvim_get_current_win() then
+        self:close_if_valid()
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = vim.api.nvim_create_augroup(self.augroup, { clear = false }),
+    pattern = tostring(win),
+    once = true,
+    callback = function()
+      self:close_if_valid()
+    end,
+  })
+end
+
+---@return boolean
+function FloatWin:close_if_valid()
+  if self.win and vim.api.nvim_win_is_valid(self.win) then
+    vim.api.nvim_win_close(self.win, true)
+    pcall(vim.api.nvim_del_augroup_by_name, self.augroup)
+    return true
+  end
+  return false
+end
+
+local float_win = FloatWin.new()
 
 ---@class Ghsigns.PrData: Ghsigns.Pr
 ---@field author_name? string
 ---@field short_body? string
 
-local pr_float_win = nil
-local pr_float_autocmd = nil
-
 --- @param pr Ghsigns.Pr
 Lualine.show_pr_info = function(pr)
   -- Close existing floating window if present
-  if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) then
-    vim.api.nvim_win_close(pr_float_win, true)
-    pr_float_win = nil
-    if pr_float_autocmd then
-      for _, id in ipairs(pr_float_autocmd) do
-        pcall(vim.api.nvim_del_autocmd, id)
-      end
-      pr_float_autocmd = nil
-    end
+  if float_win:close_if_valid() then
     return
   end
   local p = vim.deepcopy(pr) --[[@as Ghsigns.PrData]]
@@ -208,15 +238,15 @@ Lualine.show_pr_info = function(pr)
   local changed_files = p.changedFiles or 0
   local additions_str = tostring(p.additions or 0)
   local deletions_str = tostring(p.deletions or 0)
-  local changes = string.format("+%s -%s (%d files, %d commits)",
-    additions_str, deletions_str, changed_files, commit_count)
+  local changes =
+    string.format("+%s -%s (%d files, %d commits)", additions_str, deletions_str, changed_files, commit_count)
   local changes_start = "Changes: "
 
   -- Calculate highlight positions: "Changes: +103 -30 (5 files, 6 commits)"
   local plus_start = #changes_start
-  local plus_end = plus_start + 1 + #additions_str  -- "+103" = 4 chars
-  local minus_start = plus_end + 1  -- space after +103
-  local minus_end = minus_start + 1 + #deletions_str  -- "-30" = 3 chars
+  local plus_end = plus_start + 1 + #additions_str -- "+103" = 4 chars
+  local minus_start = plus_end + 1 -- space after +103
+  local minus_end = minus_start + 1 + #deletions_str -- "-30" = 3 chars
 
   add_line(changes_start .. changes, {
     { col = 0, end_col = #changes_start - 1, hl = "Comment" },
@@ -227,7 +257,9 @@ Lualine.show_pr_info = function(pr)
 
   -- Labels
   if p.labels and p.labels.nodes and #p.labels.nodes > 0 then
-    local label_names = vim.tbl_map(function(label) return label.name end, p.labels.nodes)
+    local label_names = vim.tbl_map(function(label)
+      return label.name
+    end, p.labels.nodes)
     add_labeled("Labels", table.concat(label_names, ", "), "Tag")
   end
 
@@ -251,7 +283,7 @@ Lualine.show_pr_info = function(pr)
   local repo_base_url = nil
   if p.url then
     -- Extract https://github.com/owner/repo from https://github.com/owner/repo/pull/123
-    repo_base_url = p.url:match("(https://[^/]+/[^/]+/[^/]+)")
+    repo_base_url = p.url:match "(https://[^/]+/[^/]+/[^/]+)"
   end
 
   -- Import markdown rendering module
@@ -278,7 +310,7 @@ Lualine.show_pr_info = function(pr)
       -- Split into words while tracking positions
       local words = {}
       local word_positions = {}
-      for word in rendered_text:gmatch("%S+") do
+      for word in rendered_text:gmatch "%S+" do
         local word_start = rendered_text:find(word, char_pos + 1, true)
         table.insert(words, word)
         table.insert(word_positions, word_start - 1) -- 0-indexed
@@ -387,7 +419,7 @@ Lualine.show_pr_info = function(pr)
     local current = ""
     local current_width = 0
 
-    for word in text:gmatch("%S+") do
+    for word in text:gmatch "%S+" do
       local word_width = vim.fn.strdisplaywidth(word)
       local space_width = current == "" and 0 or 1
 
@@ -433,7 +465,7 @@ Lualine.show_pr_info = function(pr)
     local cleaned_lines = {}
     local prev_blank = false
     for _, line in ipairs(body_lines) do
-      local is_blank = line:match("^%s*$") ~= nil
+      local is_blank = line:match "^%s*$" ~= nil
       if not (is_blank and prev_blank) then
         table.insert(cleaned_lines, line)
       end
@@ -482,7 +514,10 @@ Lualine.show_pr_info = function(pr)
   -- Add close button at the bottom
   add_line ""
   local close_text = "✕ Click here to close (or press q/Esc/Enter)"
-  add_line(close_text, { { col = 0, end_col = 1, hl = "ErrorMsg" }, { col = 2, end_col = #close_text, hl = "Comment" } })
+  add_line(
+    close_text,
+    { { col = 0, end_col = 1, hl = "ErrorMsg" }, { col = 2, end_col = #close_text, hl = "Comment" } }
+  )
   local close_line_idx = #lines - 1
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -555,7 +590,7 @@ Lualine.show_pr_info = function(pr)
   }
 
   local win = vim.api.nvim_open_win(buf, false, opts)
-  pr_float_win = win
+  float_win:setup(win)
 
   -- Set window options
   vim.api.nvim_set_option_value("wrap", true, { win = win })
@@ -580,16 +615,7 @@ Lualine.show_pr_info = function(pr)
 
       -- Check if close button was clicked
       if click_line == close_line_idx + 1 then -- 1-indexed
-        if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) then
-          vim.api.nvim_win_close(pr_float_win, true)
-          pr_float_win = nil
-          if pr_float_autocmd then
-            for _, id in ipairs(pr_float_autocmd) do
-              pcall(vim.api.nvim_del_autocmd, id)
-            end
-            pr_float_autocmd = nil
-          end
-        end
+        float_win:close_if_valid()
         return
       end
 
@@ -613,52 +639,6 @@ Lualine.show_pr_info = function(pr)
       end
     end
   end, { buffer = buf, noremap = true, silent = true })
-
-  -- Auto-close when clicking or entering any other window
-  local augroup = vim.api.nvim_create_augroup("ghsigns_pr_float", { clear = false })
-
-  -- Function to check and close floating window
-  local function close_if_not_float()
-    local current_win = vim.api.nvim_get_current_win()
-    if pr_float_win and vim.api.nvim_win_is_valid(pr_float_win) and current_win ~= pr_float_win then
-      vim.api.nvim_win_close(pr_float_win, true)
-      pr_float_win = nil
-      if pr_float_autocmd then
-        for _, id in ipairs(pr_float_autocmd) do
-          pcall(vim.api.nvim_del_autocmd, id)
-        end
-        pr_float_autocmd = nil
-      end
-    end
-  end
-
-  -- Close when entering any window or when cursor moves (including mouse clicks)
-  pr_float_autocmd = {
-    vim.api.nvim_create_autocmd("WinEnter", {
-      group = augroup,
-      callback = close_if_not_float,
-    }),
-    vim.api.nvim_create_autocmd("CursorMoved", {
-      group = augroup,
-      callback = close_if_not_float,
-    }),
-  }
-
-  -- Clean up when window is closed manually
-  vim.api.nvim_create_autocmd("WinClosed", {
-    group = augroup,
-    pattern = tostring(win),
-    once = true,
-    callback = function()
-      pr_float_win = nil
-      if pr_float_autocmd then
-        for _, id in ipairs(pr_float_autocmd) do
-          pcall(vim.api.nvim_del_autocmd, id)
-        end
-        pr_float_autocmd = nil
-      end
-    end,
-  })
 end
 
 return Lualine
