@@ -54,7 +54,7 @@ Lualine.get_info = function()
   return ghsigns:get(vim.api.nvim_get_current_buf())
 end
 
-local click_count = 0
+local wait_double_click = false
 
 ---@param clicks integer
 Lualine.on_click = function(clicks)
@@ -64,15 +64,15 @@ Lualine.on_click = function(clicks)
   local _, pr = Lualine.get_info()
   if pr and pr.url then
     if clicks == 1 then
-      click_count = 1
+      wait_double_click = true
       assert(vim.uv.new_timer()):start(300, 0, function()
-        if click_count == 1 then
-          click_count = 0
+        if wait_double_click then
+          wait_double_click = false
           vim.schedule_wrap(Lualine.show_pr_info)(pr)
         end
       end)
     elseif clicks == 2 then
-      click_count = 0
+      wait_double_click = false
       vim.notify("opening PR: " .. pr.url)
       vim.ui.open(pr.url)
     end
