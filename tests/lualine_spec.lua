@@ -66,7 +66,7 @@ describe("Lualine module", function()
       lualine.get_info = original_get_info
 
       eq(1, #notifications)
-      assert.is_true(notifications[1].msg:find("no PR found") ~= nil)
+      assert.is_true(notifications[1].msg:find "No PR information" ~= nil)
     end)
 
     it("should open URL on double click", function()
