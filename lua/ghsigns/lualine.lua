@@ -183,7 +183,7 @@ Lualine.show_pr_info = function(pr)
   end
   add_line(title_text, title_hls)
 
-  -- Store title line for click detection
+  -- Store title line for URL extmark
   local title_line = #lines - 1
 
   -- Branches
@@ -604,6 +604,14 @@ Lualine.show_pr_info = function(pr)
     })
   end
 
+  -- Apply URL extmark to title line for hover effect
+  if p.url then
+    vim.api.nvim_buf_set_extmark(buf, ns, title_line, 0, {
+      end_col = #title_text,
+      url = p.url,
+    })
+  end
+
   -- Get mouse position
   local mouse_pos = vim.fn.getmousepos()
   local row = mouse_pos.screenrow
@@ -653,36 +661,30 @@ Lualine.show_pr_info = function(pr)
     vim.api.nvim_buf_set_keymap(buf, "n", key, ":close<CR>", { noremap = true, silent = true })
   end
 
-  -- Mouse click anywhere in the buffer to detect clicks on close button, title, and links
+  -- Mouse click handler: close button uses position check, URLs use extmarks
   vim.keymap.set("n", "<LeftRelease>", function()
-    -- Get the mouse click position
     local mouse = vim.fn.getmousepos()
     if mouse.winid == win then
-      local click_line = mouse.line
-      local click_col = mouse.column
-
       -- Check if close button was clicked
-      if click_line == close_line_idx + 1 then -- 1-indexed
+      if mouse.line == close_line_idx + 1 then -- 1-indexed
         float_win:close_if_valid()
         return
       end
 
-      -- Check if title line was clicked
-      if click_line == title_line + 1 and p.url then -- 1-indexed
-        vim.notify("Opening PR: " .. p.url, vim.log.levels.INFO)
-        vim.ui.open(p.url)
-        return
-      end
-
-      -- Check if a link was clicked
-      for _, link in ipairs(link_metadata) do
-        -- Debug: uncomment to see link regions
-        -- vim.notify(string.format("Link: line=%d, col=%d-%d, url=%s", link.line, link.col_start, link.col_end, link.url))
-
-        if link.line == click_line - 1 and click_col >= link.col_start + 1 and click_col < link.col_end + 1 then
-          vim.notify("Opening: " .. link.url, vim.log.levels.INFO)
-          vim.ui.open(link.url)
-          return
+      -- Check for clickable extmarks with url property
+      local click_line = mouse.line - 1 -- 0-indexed
+      local click_col = mouse.column - 1 -- 0-indexed
+      local extmarks =
+        vim.api.nvim_buf_get_extmarks(buf, ns, { click_line, 0 }, { click_line + 1, 0 }, { details = true })
+      for _, mark in ipairs(extmarks) do
+        local _, _, start_col, details = unpack(mark)
+        if details.url then
+          local end_col = details.end_col or (start_col + 1)
+          if click_col >= start_col and click_col < end_col then
+            vim.notify("Opening: " .. details.url, vim.log.levels.INFO)
+            vim.ui.open(details.url)
+            return
+          end
         end
       end
     end
