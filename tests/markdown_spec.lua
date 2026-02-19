@@ -209,6 +209,27 @@ describe("Markdown rendering", function()
       eq("Run npm test for #123", text)
       eq(1, #links)
     end)
+
+    it("should correctly position link highlight after bold and code markers are removed", function()
+      local text, highlights, links =
+        markdown.render("**bold**, `inline code`, [links](https://example.com), and headings")
+      eq("bold, inline code, links, and headings", text)
+
+      -- Find the Underlined highlight for "links"
+      local link_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Underlined" then
+          link_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(link_hl)
+      eq("links", text:sub(link_hl.col + 1, link_hl.end_col))
+
+      -- Also verify link metadata position matches
+      eq(1, #links)
+      eq("links", text:sub(links[1].col_start + 1, links[1].col_end))
+    end)
   end)
 
   describe("CR character handling", function()
