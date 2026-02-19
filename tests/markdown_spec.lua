@@ -141,6 +141,27 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Strikethrough", function()
+    it("should remove ~~ markers from strikethrough text", function()
+      local text, highlights = markdown.render("This is ~~removed~~ text")
+      eq("This is removed text", text)
+      local strike_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "DiagnosticDeprecated" then
+          strike_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(strike_hl)
+      eq("removed", text:sub(strike_hl.col + 1, strike_hl.end_col))
+    end)
+
+    it("should handle multiple strikethrough segments", function()
+      local text = markdown.render("~~first~~ and ~~second~~")
+      eq("first and second", text)
+    end)
+  end)
+
   describe("Combined markdown", function()
     it("should handle links and bold together", function()
       local text = markdown.render("**Important**: See [docs](https://example.com)")

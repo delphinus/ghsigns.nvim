@@ -109,6 +109,24 @@ Markdown.render = function(text, repo_base_url)
   end
   rendered_text = processed
 
+  -- Strikethrough ~~text~~ - remove markers
+  processed = ""
+  i = 1
+  while i <= #rendered_text do
+    local s, e = rendered_text:find("~~([^~]+)~~", i)
+    if s == i then
+      local content = rendered_text:match("~~([^~]+)~~", i)
+      local start_col = #processed
+      processed = processed .. content
+      table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "DiagnosticDeprecated" })
+      i = e + 1
+    else
+      processed = processed .. rendered_text:sub(i, i)
+      i = i + 1
+    end
+  end
+  rendered_text = processed
+
   -- Code `text` - remove backticks
   processed = ""
   i = 1
