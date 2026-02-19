@@ -162,6 +162,42 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Blockquote", function()
+    it("should replace > prefix with visual bar", function()
+      local text, highlights, links, special_type = markdown.render("> Quoted text")
+      eq("│ Quoted text", text)
+      eq("blockquote", special_type)
+      eq({ col = 0, end_col = #"│ ", hl = "FloatBorder" }, highlights[1])
+    end)
+
+    it("should handle nested blockquotes", function()
+      local text, highlights, links, special_type = markdown.render(">> Nested quote")
+      eq("│ │ Nested quote", text)
+      eq("blockquote", special_type)
+      eq({ col = 0, end_col = #"│ │ ", hl = "FloatBorder" }, highlights[1])
+    end)
+
+    it("should process inline markdown inside blockquotes", function()
+      local text, highlights = markdown.render("> This is **bold** text")
+      eq("│ This is bold text", text)
+      local bold_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Bold" then
+          bold_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(bold_hl)
+      eq("bold", text:sub(bold_hl.col + 1, bold_hl.end_col))
+    end)
+
+    it("should handle empty blockquote lines", function()
+      local text, highlights, links, special_type = markdown.render(">")
+      eq("│ ", text)
+      eq("blockquote", special_type)
+    end)
+  end)
+
   describe("Combined markdown", function()
     it("should handle links and bold together", function()
       local text = markdown.render("**Important**: See [docs](https://example.com)")

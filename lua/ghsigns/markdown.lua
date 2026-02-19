@@ -24,6 +24,18 @@ Markdown.render = function(text, repo_base_url)
     return rendered_text, highlights, links, "heading"
   end
 
+  -- Blockquote (> ) - replace prefix with visual bar
+  local quote_prefix = ""
+  local is_blockquote = false
+  while rendered_text:match "^>%s?" do
+    rendered_text = rendered_text:gsub("^>%s?", "", 1)
+    quote_prefix = quote_prefix .. "│ "
+    is_blockquote = true
+  end
+  if is_blockquote then
+    table.insert(highlights, { col = 0, end_col = #quote_prefix, hl = "FloatBorder" })
+  end
+
   -- List items (- * 1.) - keep the marker
   local list_marker, list_content = rendered_text:match "^(%s*[-*]%s)(.*)$"
   if not list_marker then
@@ -153,6 +165,24 @@ Markdown.render = function(text, repo_base_url)
   -- Add list marker highlight if present
   if list_marker then
     table.insert(highlights, 1, { col = 0, end_col = #list_marker, hl = "Special" })
+  end
+
+  -- Prepend blockquote prefix and shift all positions
+  if is_blockquote then
+    local offset = #quote_prefix
+    rendered_text = quote_prefix .. rendered_text
+    for _, hl in ipairs(highlights) do
+      -- Skip the FloatBorder highlight we already inserted for the prefix
+      if hl.hl ~= "FloatBorder" then
+        hl.col = hl.col + offset
+        hl.end_col = hl.end_col + offset
+      end
+    end
+    for _, link in ipairs(links) do
+      link.col_start = link.col_start + offset
+      link.col_end = link.col_end + offset
+    end
+    return rendered_text, highlights, links, "blockquote"
   end
 
   return rendered_text, highlights, links, nil
