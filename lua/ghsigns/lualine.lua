@@ -124,39 +124,91 @@ local float_win = FloatWin.new()
 
 ---@class Ghsigns.PrData: Ghsigns.Pr
 ---@field author_name? string
----@field short_body? string
 
---- Build PR content for display (extracted for testability)
+---@class Ghsigns.Highlight.Group
+---@field col integer 0-indexed start column
+---@field end_col integer 0-indexed end column (-1 means end of line)
+---@field hl string highlight group name
+
+---@class Ghsigns.LineHighlight
+---@field line integer 0-indexed line number
+---@field groups Ghsigns.Highlight.Group[]
+
+---@class Ghsigns.LinkMetadata
+---@field line integer 0-indexed line number
+---@field col_start integer 0-indexed start column
+---@field col_end integer 0-indexed end column
+---@field url string
+
+---@class Ghsigns.PrContent
+---@field lines string[]
+---@field highlights Ghsigns.LineHighlight[]
+---@field link_metadata Ghsigns.LinkMetadata[]
+---@field title_line integer
+---@field title_text string
+---@field close_line_idx integer
+
+---@class Ghsigns.ContentBuilder
+---@field lines string[]
+---@field highlights Ghsigns.LineHighlight[]
+---@field link_metadata Ghsigns.LinkMetadata[]
+local ContentBuilder = {}
+
+---@return Ghsigns.ContentBuilder
+function ContentBuilder.new()
+  return setmetatable({
+    lines = {},
+    highlights = {},
+    link_metadata = {},
+  }, { __index = ContentBuilder })
+end
+
+---@param text string
+---@param hl_groups? Ghsigns.Highlight.Group[]
+function ContentBuilder:add_line(text, hl_groups)
+  table.insert(self.lines, text)
+  if hl_groups then
+    table.insert(self.highlights, { line = #self.lines - 1, groups = hl_groups })
+  end
+end
+
+---@param label string
+---@param value string
+---@param value_hl? string
+function ContentBuilder:add_labeled(label, value, value_hl)
+  local line = label .. ": " .. value
+  self:add_line(line, {
+    { col = 0, end_col = #label, hl = "Comment" },
+    { col = #label + 2, end_col = #line, hl = value_hl or "Normal" },
+  })
+end
+
+---@return Ghsigns.PrContent
+function ContentBuilder:result()
+  return {
+    lines = self.lines,
+    highlights = self.highlights,
+    link_metadata = self.link_metadata,
+  }
+end
+
+--- Prepare PR data by deep-copying and extracting author name
 ---@param pr Ghsigns.Pr
----@return table content { lines, highlights, link_metadata, title_line, close_line_idx, title_text }
-Lualine.build_pr_content = function(pr)
+---@return Ghsigns.PrData
+local function prepare_pr_data(pr)
   local p = vim.deepcopy(pr) --[[@as Ghsigns.PrData]]
   if p.author then
     p.author_name = (p.author.name and p.author.name ~= "") and p.author.name or (p.author.login or "Unknown")
   end
+  return p
+end
 
-  -- Build content with metadata for highlighting
-  local lines = {}
-  local highlights = {}
-
-  -- Helper to add a line with highlights
-  local function add_line(text, hl_groups)
-    table.insert(lines, text)
-    if hl_groups then
-      table.insert(highlights, { line = #lines - 1, groups = hl_groups })
-    end
-  end
-
-  -- Helper to add a labeled line
-  local function add_labeled(label, value, value_hl)
-    local line = label .. ": " .. value
-    add_line(line, {
-      { col = 0, end_col = #label, hl = "Comment" },
-      { col = #label + 2, end_col = #line, hl = value_hl or "Normal" },
-    })
-  end
-
-  -- Title with Draft indicator (clickable)
+--- Add title line with optional DRAFT indicator
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+---@return integer title_line
+---@return string title_text
+function ContentBuilder:add_title_line(p)
   local title_prefix = (p.isDraft == true) and "[DRAFT] " or ""
   local title_text = "#" .. (p.number or 0) .. " " .. title_prefix .. (p.title or "")
   local number_str = tostring(p.number or 0)
@@ -170,52 +222,14 @@ Lualine.build_pr_content = function(pr)
   else
     table.insert(title_hls, { col = #number_str + 2, end_col = -1, hl = "GhsignsPrTitle" })
   end
-  add_line(title_text, title_hls)
+  self:add_line(title_text, title_hls)
+  return #self.lines - 1, title_text
+end
 
-  -- Store title line for URL extmark
-  local title_line = #lines - 1
-
-  -- Branches
-  if p.baseRefName and p.headRefName then
-    local branch_info = string.format("%s ← %s", p.baseRefName, p.headRefName)
-    add_line(branch_info, {
-      { col = 0, end_col = #p.baseRefName, hl = "String" },
-      { col = #p.baseRefName + 1, end_col = #p.baseRefName + 3, hl = "Operator" },
-      { col = #p.baseRefName + 4, end_col = -1, hl = "Identifier" },
-    })
-  end
-
-  add_line ""
-
-  -- Author
-  if p.author_name then
-    add_labeled("Author", p.author_name, "String")
-  end
-
-  -- State
-  if p.state then
-    local state_hl = p.state == "OPEN" and "DiagnosticOk" or "DiagnosticError"
-    add_labeled("State", p.state, state_hl)
-  end
-
-  -- Review Decision
-  if p.reviewDecision and p.reviewDecision ~= "" then
-    local review_hl = "DiagnosticWarn"
-    if p.reviewDecision == "APPROVED" then
-      review_hl = "DiagnosticOk"
-    elseif p.reviewDecision == "CHANGES_REQUESTED" then
-      review_hl = "DiagnosticError"
-    end
-    add_labeled("Review", p.reviewDecision:gsub("_", " "), review_hl)
-  end
-
-  -- Mergeable
-  if p.mergeable and p.mergeable ~= "" then
-    local merge_hl = p.mergeable == "MERGEABLE" and "DiagnosticOk" or "DiagnosticError"
-    add_labeled("Mergeable", p.mergeable, merge_hl)
-  end
-
-  -- Changes
+--- Add changes line with diff-colored highlights
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+function ContentBuilder:add_changes_line(p)
   local commit_count = 0
   if p.commits then
     if p.commits.nodes then
@@ -231,372 +245,470 @@ Lualine.build_pr_content = function(pr)
     string.format("+%s -%s (%d files, %d commits)", additions_str, deletions_str, changed_files, commit_count)
   local changes_start = "Changes: "
 
-  -- Calculate highlight positions: "Changes: +103 -30 (5 files, 6 commits)"
   local plus_start = #changes_start
-  local plus_end = plus_start + 1 + #additions_str -- "+103" = 4 chars
-  local minus_start = plus_end + 1 -- space after +103
-  local minus_end = minus_start + 1 + #deletions_str -- "-30" = 3 chars
+  local plus_end = plus_start + 1 + #additions_str
+  local minus_start = plus_end + 1
+  local minus_end = minus_start + 1 + #deletions_str
 
-  add_line(changes_start .. changes, {
+  self:add_line(changes_start .. changes, {
     { col = 0, end_col = #changes_start - 1, hl = "Comment" },
     { col = plus_start, end_col = plus_end, hl = "DiffAdd" },
     { col = minus_start, end_col = minus_end, hl = "DiffDelete" },
     { col = minus_end + 1, end_col = -1, hl = "Comment" },
   })
+end
 
-  -- Labels
+--- Add metadata fields (Author, State, Review, Mergeable, Changes, Labels)
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+function ContentBuilder:add_metadata_fields(p)
+  if p.author_name then
+    self:add_labeled("Author", p.author_name, "String")
+  end
+
+  if p.state then
+    local state_hl = p.state == "OPEN" and "DiagnosticOk" or "DiagnosticError"
+    self:add_labeled("State", p.state, state_hl)
+  end
+
+  if p.reviewDecision and p.reviewDecision ~= "" then
+    local review_hl = "DiagnosticWarn"
+    if p.reviewDecision == "APPROVED" then
+      review_hl = "DiagnosticOk"
+    elseif p.reviewDecision == "CHANGES_REQUESTED" then
+      review_hl = "DiagnosticError"
+    end
+    self:add_labeled("Review", p.reviewDecision:gsub("_", " "), review_hl)
+  end
+
+  if p.mergeable and p.mergeable ~= "" then
+    local merge_hl = p.mergeable == "MERGEABLE" and "DiagnosticOk" or "DiagnosticError"
+    self:add_labeled("Mergeable", p.mergeable, merge_hl)
+  end
+
+  self:add_changes_line(p)
+
   if p.labels and p.labels.nodes and #p.labels.nodes > 0 then
     local label_names = vim.tbl_map(function(label)
       return label.name
     end, p.labels.nodes)
-    add_labeled("Labels", table.concat(label_names, ", "), "Tag")
+    self:add_labeled("Labels", table.concat(label_names, ", "), "Tag")
   end
+end
 
-  add_line ""
-
-  -- Dates
+--- Add date fields (Created, Updated, Merged)
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+function ContentBuilder:add_date_fields(p)
   if p.createdAt then
-    add_labeled("Created", p.createdAt, "DiagnosticHint")
+    self:add_labeled("Created", p.createdAt, "DiagnosticHint")
   end
   if p.updatedAt then
-    add_labeled("Updated", p.updatedAt, "DiagnosticHint")
+    self:add_labeled("Updated", p.updatedAt, "DiagnosticHint")
   end
   if p.mergedAt then
-    add_labeled("Merged", p.mergedAt, "DiagnosticOk")
+    self:add_labeled("Merged", p.mergedAt, "DiagnosticOk")
+  end
+end
+
+--- Build the header section (title, branches, metadata, dates)
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+---@return integer title_line
+---@return string title_text
+function ContentBuilder:build_header(p)
+  local title_line, title_text = self:add_title_line(p)
+
+  if p.baseRefName and p.headRefName then
+    local branch_info = string.format("%s ← %s", p.baseRefName, p.headRefName)
+    self:add_line(branch_info, {
+      { col = 0, end_col = #p.baseRefName, hl = "String" },
+      { col = #p.baseRefName + 1, end_col = #p.baseRefName + 3, hl = "Operator" },
+      { col = #p.baseRefName + 4, end_col = -1, hl = "Identifier" },
+    })
   end
 
-  -- Store clickable links metadata
-  local link_metadata = {}
+  self:add_line ""
+  self:add_metadata_fields(p)
+  self:add_line ""
+  self:add_date_fields(p)
 
-  -- Extract base repository URL from PR URL
-  local repo_base_url = nil
-  if p.url then
-    -- Extract https://github.com/owner/repo from https://github.com/owner/repo/pull/123
-    repo_base_url = p.url:match "(https://[^/]+/[^/]+/[^/]+)"
+  return title_line, title_text
+end
+
+--- Wrap text into lines at word boundaries, tracking original positions
+---@param text string The text to wrap
+---@param max_width integer Maximum display width per line
+---@return string[] wrapped_lines
+---@return integer[] line_starts 0-indexed start position of each line in the original text
+local function wrap_words(text, max_width)
+  local wrapped_lines = {}
+  local line_starts = {}
+  local current = ""
+  local current_width = 0
+  local current_start = 0
+  local char_pos = 0
+
+  local words = {}
+  local word_positions = {}
+  for word in text:gmatch "%S+" do
+    local word_start = text:find(word, char_pos + 1, true)
+    table.insert(words, word)
+    table.insert(word_positions, word_start - 1)
+    char_pos = word_start + #word - 1
   end
 
-  -- Import markdown rendering module
-  local markdown = require "ghsigns.markdown"
+  for i, word in ipairs(words) do
+    local word_width = vim.fn.strdisplaywidth(word)
+    local space_width = current == "" and 0 or 1
 
-  -- Helper function to add markdown line with wrapping support
-  local function add_markdown_line(text, indent, max_width)
-    indent = indent or "  "
-    max_width = max_width or 80
+    if current_width + space_width + word_width > max_width and current ~= "" then
+      table.insert(wrapped_lines, current)
+      table.insert(line_starts, current_start)
+      current = word
+      current_start = word_positions[i]
+      current_width = word_width
+    else
+      if current ~= "" then
+        current = current .. " " .. word
+        current_width = current_width + 1 + word_width
+      else
+        current = word
+        current_start = word_positions[i]
+        current_width = word_width
+      end
+    end
+  end
 
-    local rendered_text, md_highlights, md_links, special_type = markdown.render(text, repo_base_url)
+  if current ~= "" then
+    table.insert(wrapped_lines, current)
+    table.insert(line_starts, current_start)
+  end
 
-    -- Extract blockquote prefix for continuation lines
-    local quote_prefix = ""
-    if special_type == "blockquote" then
-      quote_prefix = rendered_text:match "^([│ ]+)" or ""
+  return wrapped_lines, line_starts
+end
+
+--- Distribute markdown highlights across wrapped lines
+---@param md_highlights Ghsigns.Markdown.Highlight[]
+---@param wrapped_lines string[] The wrapped line texts
+---@param line_starts integer[] Start positions of each wrapped line
+---@param indent string Indentation prefix
+---@param quote_prefix string Blockquote prefix (may be empty)
+---@param content_offset integer Byte offset of content within the original rendered text
+---@return Ghsigns.Highlight.Group[][] per_line_highlights Array of highlight lists, one per wrapped line
+local function distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset)
+  local per_line = {}
+  for idx, wline in ipairs(wrapped_lines) do
+    local line_start_pos = line_starts[idx]
+    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+    local line_hls = {}
+
+    -- Add FloatBorder highlight for blockquote prefix on continuation lines
+    if quote_prefix ~= "" and idx > 1 then
+      table.insert(line_hls, {
+        col = #indent,
+        end_col = #indent + #quote_prefix,
+        hl = "FloatBorder",
+      })
     end
 
-    -- Wrap if necessary
-    local display_width = vim.fn.strdisplaywidth(rendered_text)
-    if display_width > max_width then
-      -- For blockquotes, wrap only the content after the prefix
-      local wrap_text = rendered_text
-      local content_offset = 0
-      if quote_prefix ~= "" then
-        wrap_text = rendered_text:sub(#quote_prefix + 1)
-        content_offset = #quote_prefix
-      end
+    for _, hl in ipairs(md_highlights) do
+      local hl_start = hl.col - content_offset
+      local hl_end = hl.end_col - content_offset
+      local wline_end = line_start_pos + #wline
 
-      -- Wrap the text and track positions
-      local wrapped_lines = {}
-      local line_starts = {} -- Track where each wrapped line starts in the original text
-      local current = ""
-      local current_width = 0
-      local current_start = 0
-      local char_pos = 0
-
-      -- Split into words while tracking positions
-      local words = {}
-      local word_positions = {}
-      for word in wrap_text:gmatch "%S+" do
-        local word_start = wrap_text:find(word, char_pos + 1, true)
-        table.insert(words, word)
-        table.insert(word_positions, word_start - 1) -- 0-indexed relative to wrap_text
-        char_pos = word_start + #word - 1
-      end
-
-      -- Available width for content (account for prefix on continuation lines)
-      local content_max_width = max_width
-      if quote_prefix ~= "" then
-        content_max_width = max_width - vim.fn.strdisplaywidth(quote_prefix)
-      end
-
-      -- Wrap words
-      for i, word in ipairs(words) do
-        local word_width = vim.fn.strdisplaywidth(word)
-        local space_width = current == "" and 0 or 1
-
-        if current_width + space_width + word_width > content_max_width and current ~= "" then
-          table.insert(wrapped_lines, current)
-          table.insert(line_starts, current_start)
-          current = word
-          current_start = word_positions[i]
-          current_width = word_width
-        else
-          if current ~= "" then
-            current = current .. " " .. word
-            current_width = current_width + 1 + word_width
-          else
-            current = word
-            current_start = word_positions[i]
-            current_width = word_width
-          end
-        end
-      end
-
-      if current ~= "" then
-        table.insert(wrapped_lines, current)
-        table.insert(line_starts, current_start)
-      end
-
-      -- Add each wrapped line
-      for idx, wline in ipairs(wrapped_lines) do
-        local line_start_pos = line_starts[idx]
-        local line_prefix = indent
-        local extra_offset = 0
-
-        -- Prepend blockquote prefix to each wrapped line
-        if quote_prefix ~= "" then
-          line_prefix = indent .. quote_prefix
-          extra_offset = #quote_prefix
-        end
-
-        local line_hls = {}
-
-        -- Add FloatBorder highlight for blockquote prefix on continuation lines
-        if quote_prefix ~= "" and idx > 1 then
+      if hl.hl == "FloatBorder" and hl.col == 0 then
+        if idx == 1 then
           table.insert(line_hls, {
-            col = #indent,
-            end_col = #indent + #quote_prefix,
-            hl = "FloatBorder",
+            col = #indent + hl.col,
+            end_col = #indent + hl.end_col,
+            hl = hl.hl,
           })
         end
-
-        for _, hl in ipairs(md_highlights) do
-          local hl_start = hl.col - content_offset
-          local hl_end = hl.end_col - content_offset
-          local wline_end = line_start_pos + #wline
-
-          -- Skip the FloatBorder highlight for the prefix (already handled above)
-          if hl.hl == "FloatBorder" and hl.col == 0 then
-            if idx == 1 then
-              -- First line: use the original highlight as-is
-              table.insert(line_hls, {
-                col = #indent + hl.col,
-                end_col = #indent + hl.end_col,
-                hl = hl.hl,
-              })
-            end
-          elseif hl_end > line_start_pos and hl_start < wline_end then
-            -- Check if highlight overlaps with this wrapped line
-            local local_start = math.max(0, hl_start - line_start_pos)
-            local local_end = math.min(#wline, hl_end - line_start_pos)
-            table.insert(line_hls, {
-              col = local_start + #line_prefix,
-              end_col = local_end + #line_prefix,
-              hl = hl.hl,
-            })
-          end
-        end
-
-        add_line(line_prefix .. wline, #line_hls > 0 and line_hls or nil)
-
-        -- Add link metadata for any wrapped line that contains a link
-        for _, link in ipairs(md_links) do
-          local link_start = link.col_start - content_offset
-          local link_end = link.col_end - content_offset
-          local wline_end = line_start_pos + #wline
-
-          -- Check if link overlaps with this wrapped line
-          if link_end > line_start_pos and link_start < wline_end then
-            local local_start = math.max(0, link_start - line_start_pos)
-            local local_end = math.min(#wline, link_end - line_start_pos)
-            table.insert(link_metadata, {
-              line = #lines - 1,
-              col_start = local_start + #line_prefix,
-              col_end = local_end + #line_prefix,
-              url = link.url,
-            })
-          end
-        end
-      end
-    else
-      -- No wrapping needed
-      local line_hls = {}
-      for _, hl in ipairs(md_highlights) do
+      elseif hl_end > line_start_pos and hl_start < wline_end then
+        local local_start = math.max(0, hl_start - line_start_pos)
+        local local_end = math.min(#wline, hl_end - line_start_pos)
         table.insert(line_hls, {
-          col = hl.col + #indent,
-          end_col = hl.end_col + #indent,
+          col = local_start + #line_prefix,
+          end_col = local_end + #line_prefix,
           hl = hl.hl,
         })
       end
+    end
 
-      add_line(indent .. rendered_text, #line_hls > 0 and line_hls or nil)
+    per_line[idx] = line_hls
+  end
+  return per_line
+end
 
-      -- Add link metadata
-      for _, link in ipairs(md_links) do
-        table.insert(link_metadata, {
-          line = #lines - 1,
-          col_start = link.col_start + #indent,
-          col_end = link.col_end + #indent,
+--- Distribute link metadata across wrapped lines
+---@param md_links Ghsigns.Markdown.Link[]
+---@param wrapped_lines string[] The wrapped line texts
+---@param line_starts integer[] Start positions of each wrapped line
+---@param indent string Indentation prefix
+---@param quote_prefix string Blockquote prefix (may be empty)
+---@param content_offset integer Byte offset of content within the original rendered text
+---@param base_line integer Current line count in the builder (0-indexed, before adding wrapped lines)
+---@return Ghsigns.LinkMetadata[] link_entries
+local function distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line)
+  local entries = {}
+  for idx, wline in ipairs(wrapped_lines) do
+    local line_start_pos = line_starts[idx]
+    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+
+    for _, link in ipairs(md_links) do
+      local link_start = link.col_start - content_offset
+      local link_end = link.col_end - content_offset
+      local wline_end = line_start_pos + #wline
+
+      if link_end > line_start_pos and link_start < wline_end then
+        local local_start = math.max(0, link_start - line_start_pos)
+        local local_end = math.min(#wline, link_end - line_start_pos)
+        table.insert(entries, {
+          line = base_line + idx - 1,
+          col_start = local_start + #line_prefix,
+          col_end = local_end + #line_prefix,
           url = link.url,
         })
       end
     end
   end
-
-  -- Helper function to wrap long lines
-  local function wrap_line(text, max_width, indent)
-    local lines_out = {}
-    local current = ""
-    local current_width = 0
-
-    for word in text:gmatch "%S+" do
-      local word_width = vim.fn.strdisplaywidth(word)
-      local space_width = current == "" and 0 or 1
-
-      if current_width + space_width + word_width > max_width and current ~= "" then
-        table.insert(lines_out, indent .. current)
-        current = word
-        current_width = word_width
-      else
-        if current ~= "" then
-          current = current .. " " .. word
-          current_width = current_width + 1 + word_width
-        else
-          current = word
-          current_width = word_width
-        end
-      end
-    end
-
-    if current ~= "" then
-      table.insert(lines_out, indent .. current)
-    end
-
-    return lines_out
-  end
-
-  -- Body with markdown rendering
-  if p.body and p.body ~= "" then
-    add_line ""
-    add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
-
-    -- Normalize line endings (remove CR)
-    local normalized_body = p.body:gsub("\r\n", "\n"):gsub("\r", "\n")
-
-    -- Remove HTML comments
-    normalized_body = normalized_body:gsub("<!%-%-.-%-%->", "")
-
-    -- Remove HTML tags
-    normalized_body = normalized_body:gsub("<[^>]+>", "")
-
-    local body_lines = vim.split(normalized_body, "\n")
-
-    -- Remove consecutive blank lines
-    local cleaned_lines = {}
-    local prev_blank = false
-    for _, line in ipairs(body_lines) do
-      local is_blank = line:match "^%s*$" ~= nil
-      if not (is_blank and prev_blank) then
-        table.insert(cleaned_lines, line)
-      end
-      prev_blank = is_blank
-    end
-
-    local in_code_block = false
-    local lines_shown = 0
-    local max_lines = 15
-    local max_width = 80
-
-    for _, body_line in ipairs(cleaned_lines) do
-      local lines_before = #lines
-
-      -- Code blocks ```
-      if body_line:match "^```" then
-        in_code_block = not in_code_block
-        add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "Comment" } })
-      elseif in_code_block then
-        -- Wrap code block lines if too long
-        local display_width = vim.fn.strdisplaywidth(body_line)
-        if display_width > max_width then
-          local wrapped = wrap_line(body_line, max_width, "  ")
-          for _, wline in ipairs(wrapped) do
-            add_line(wline, { { col = 0, end_col = -1, hl = "String" } })
-          end
-        else
-          add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "String" } })
-        end
-      else
-        add_markdown_line(body_line, "  ", max_width)
-      end
-
-      -- Count lines added
-      local lines_added = #lines - lines_before
-      lines_shown = lines_shown + lines_added
-
-      -- Check if we've exceeded max lines
-      if lines_shown >= max_lines then
-        add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
-        break
-      end
-    end
-  end
-
-  -- Add close button at the bottom
-  add_line ""
-  local close_text = "✕ Click here to close (or press q/Esc/Enter)"
-  add_line(
-    close_text,
-    { { col = 0, end_col = 1, hl = "ErrorMsg" }, { col = 2, end_col = #close_text, hl = "Comment" } }
-  )
-  local close_line_idx = #lines - 1
-
-  return {
-    lines = lines,
-    highlights = highlights,
-    link_metadata = link_metadata,
-    title_line = title_line,
-    close_line_idx = close_line_idx,
-    title_text = title_text,
-  }
+  return entries
 end
 
---- @param pr Ghsigns.Pr
-Lualine.show_pr_info = function(pr)
-  -- Close existing floating window if present
-  if float_win:close_if_valid() then
+--- Add a wrapped markdown line with highlights and links distributed across wrapped lines
+---@param self Ghsigns.ContentBuilder
+---@param rendered_text string
+---@param md_highlights Ghsigns.Markdown.Highlight[]
+---@param md_links Ghsigns.Markdown.Link[]
+---@param indent string
+---@param max_width integer
+---@param quote_prefix string
+function ContentBuilder:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix)
+  local wrap_text = rendered_text
+  local content_offset = 0
+  if quote_prefix ~= "" then
+    wrap_text = rendered_text:sub(#quote_prefix + 1)
+    content_offset = #quote_prefix
+  end
+
+  local content_max_width = max_width
+  if quote_prefix ~= "" then
+    content_max_width = max_width - vim.fn.strdisplaywidth(quote_prefix)
+  end
+
+  local wrapped_lines, line_starts = wrap_words(wrap_text, content_max_width)
+  local per_line_hls = distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset)
+  local base_line = #self.lines
+  local link_entries = distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line)
+
+  for idx, wline in ipairs(wrapped_lines) do
+    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+    local line_hls = per_line_hls[idx]
+    self:add_line(line_prefix .. wline, #line_hls > 0 and line_hls or nil)
+  end
+
+  for _, entry in ipairs(link_entries) do
+    table.insert(self.link_metadata, entry)
+  end
+end
+
+--- Add a simple (non-wrapped) markdown line with highlights and links
+---@param self Ghsigns.ContentBuilder
+---@param rendered_text string
+---@param md_highlights Ghsigns.Markdown.Highlight[]
+---@param md_links Ghsigns.Markdown.Link[]
+---@param indent string
+function ContentBuilder:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
+  local line_hls = {}
+  for _, hl in ipairs(md_highlights) do
+    table.insert(line_hls, {
+      col = hl.col + #indent,
+      end_col = hl.end_col + #indent,
+      hl = hl.hl,
+    })
+  end
+
+  self:add_line(indent .. rendered_text, #line_hls > 0 and line_hls or nil)
+
+  for _, link in ipairs(md_links) do
+    table.insert(self.link_metadata, {
+      line = #self.lines - 1,
+      col_start = link.col_start + #indent,
+      col_end = link.col_end + #indent,
+      url = link.url,
+    })
+  end
+end
+
+--- Add a markdown-rendered line with wrapping support
+---@param self Ghsigns.ContentBuilder
+---@param text string
+---@param indent string
+---@param max_width integer
+---@param repo_base_url? string
+function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url)
+  local markdown = require "ghsigns.markdown"
+  local rendered_text, md_highlights, md_links, special_type = markdown.render(text, repo_base_url)
+
+  local quote_prefix = ""
+  if special_type == "blockquote" then
+    quote_prefix = rendered_text:match "^([│ ]+)" or ""
+  end
+
+  if vim.fn.strdisplaywidth(rendered_text) > max_width then
+    self:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix)
+  else
+    self:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
+  end
+end
+
+--- Wrap long lines for code blocks
+---@param text string
+---@param max_width integer
+---@param indent string
+---@return string[]
+local function wrap_line(text, max_width, indent)
+  local lines_out = {}
+  local current = ""
+  local current_width = 0
+
+  for word in text:gmatch "%S+" do
+    local word_width = vim.fn.strdisplaywidth(word)
+    local space_width = current == "" and 0 or 1
+
+    if current_width + space_width + word_width > max_width and current ~= "" then
+      table.insert(lines_out, indent .. current)
+      current = word
+      current_width = word_width
+    else
+      if current ~= "" then
+        current = current .. " " .. word
+        current_width = current_width + 1 + word_width
+      else
+        current = word
+        current_width = word_width
+      end
+    end
+  end
+
+  if current ~= "" then
+    table.insert(lines_out, indent .. current)
+  end
+
+  return lines_out
+end
+
+--- Normalize body text: fix line endings, strip HTML, compress blank lines
+---@param body string
+---@return string[]
+local function normalize_body(body)
+  local text = body:gsub("\r\n", "\n"):gsub("\r", "\n")
+  text = text:gsub("<!%-%-.-%-%->", "")
+  text = text:gsub("<[^>]+>", "")
+
+  local raw_lines = vim.split(text, "\n")
+  local cleaned = {}
+  local prev_blank = false
+  for _, line in ipairs(raw_lines) do
+    local is_blank = line:match "^%s*$" ~= nil
+    if not (is_blank and prev_blank) then
+      table.insert(cleaned, line)
+    end
+    prev_blank = is_blank
+  end
+  return cleaned
+end
+
+--- Build the body section (description with markdown rendering)
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+function ContentBuilder:build_body(p)
+  if not p.body or p.body == "" then
     return
   end
 
-  -- Create a floating window
-  local buf = vim.api.nvim_create_buf(false, true)
-  local ns = vim.api.nvim_create_namespace "ghsigns_pr_info"
+  local repo_base_url = nil
+  if p.url then
+    repo_base_url = p.url:match "(https://[^/]+/[^/]+/[^/]+)"
+  end
 
-  -- Create custom highlight group for PR title (Title + underline)
-  local title_hl = vim.api.nvim_get_hl(0, { name = "Title" })
-  title_hl.underline = true
-  vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
+  self:add_line ""
+  self:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
 
-  -- Build content
-  local content = Lualine.build_pr_content(pr)
+  local cleaned_lines = normalize_body(p.body)
+  local in_code_block = false
+  local lines_shown = 0
+  local max_lines = 15
+  local max_width = 80
 
+  for _, body_line in ipairs(cleaned_lines) do
+    local lines_before = #self.lines
+
+    if body_line:match "^```" then
+      in_code_block = not in_code_block
+      self:add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "Comment" } })
+    elseif in_code_block then
+      local display_width = vim.fn.strdisplaywidth(body_line)
+      if display_width > max_width then
+        local wrapped = wrap_line(body_line, max_width, "  ")
+        for _, wline in ipairs(wrapped) do
+          self:add_line(wline, { { col = 0, end_col = -1, hl = "String" } })
+        end
+      else
+        self:add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "String" } })
+      end
+    else
+      self:add_markdown_line(body_line, "  ", max_width, repo_base_url)
+    end
+
+    local lines_added = #self.lines - lines_before
+    lines_shown = lines_shown + lines_added
+
+    if lines_shown >= max_lines then
+      self:add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
+      break
+    end
+  end
+end
+
+--- Build the footer section (close button)
+---@param self Ghsigns.ContentBuilder
+---@return integer close_line_idx
+function ContentBuilder:build_footer()
+  self:add_line ""
+  local close_text = "✕ Click here to close (or press q/Esc/Enter)"
+  self:add_line(
+    close_text,
+    { { col = 0, end_col = 1, hl = "ErrorMsg" }, { col = 2, end_col = #close_text, hl = "Comment" } }
+  )
+  return #self.lines - 1
+end
+
+--- Build PR content for display (extracted for testability)
+---@param pr Ghsigns.Pr
+---@return Ghsigns.PrContent
+Lualine.build_pr_content = function(pr)
+  local b = ContentBuilder.new()
+  local p = prepare_pr_data(pr)
+  local title_line, title_text = b:build_header(p)
+  b:build_body(p)
+  local close_line_idx = b:build_footer()
+  local result = b:result()
+  result.title_line = title_line
+  result.title_text = title_text
+  result.close_line_idx = close_line_idx
+  return result
+end
+
+--- Apply highlights, link extmarks, and title extmark to a buffer
+---@param buf integer
+---@param ns integer
+---@param content Ghsigns.PrContent
+---@param pr_url? string
+local function apply_content_to_buffer(buf, ns, content, pr_url)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
 
-  -- Calculate window size
-  local width = 0
-  for _, line in ipairs(content.lines) do
-    width = math.max(width, vim.fn.strdisplaywidth(line))
-  end
-  width = math.min(width + 2, math.floor(vim.o.columns * 0.8))
-  local height = math.min(#content.lines, math.floor(vim.o.lines * 0.8))
-
-  -- Apply highlights
   for _, hl_info in ipairs(content.highlights) do
     local line_text = content.lines[hl_info.line + 1]
     if line_text then
@@ -613,7 +725,6 @@ Lualine.show_pr_info = function(pr)
     end
   end
 
-  -- Apply clickable links
   for _, link in ipairs(content.link_metadata) do
     vim.api.nvim_buf_set_extmark(buf, ns, link.line, link.col_start, {
       end_col = link.col_end,
@@ -622,27 +733,33 @@ Lualine.show_pr_info = function(pr)
     })
   end
 
-  -- Apply URL extmark to title line for hover effect
-  if pr.url then
+  if pr_url then
     vim.api.nvim_buf_set_extmark(buf, ns, content.title_line, 0, {
       end_col = #content.title_text,
-      url = pr.url,
+      url = pr_url,
     })
   end
+end
 
-  -- Get mouse position
+--- Calculate window size and position, open the floating window
+---@param buf integer
+---@param content Ghsigns.PrContent
+---@return integer win
+local function open_float_window(buf, content)
+  local width = 0
+  for _, line in ipairs(content.lines) do
+    width = math.max(width, vim.fn.strdisplaywidth(line))
+  end
+  width = math.min(width + 2, math.floor(vim.o.columns * 0.8))
+  local height = math.min(#content.lines, math.floor(vim.o.lines * 0.8))
+
   local mouse_pos = vim.fn.getmousepos()
   local row = mouse_pos.screenrow
   local col = mouse_pos.screencol
 
-  -- Calculate available space (excluding status line and command line)
-  -- vim.o.lines includes all lines (0-indexed rows from 0 to lines-1)
-  -- Border adds 2 rows (top and bottom), so total window height is height + 2
-  local total_height = height + 2 -- content + borders
-  local max_row = vim.o.lines - vim.o.cmdheight - 1 -- Last row before cmdline
+  local total_height = height + 2
+  local max_row = vim.o.lines - vim.o.cmdheight - 1
 
-  -- Adjust position to avoid going off screen and overlapping with status line
-  -- Ensure the bottom of the window doesn't exceed max_row
   if row + total_height > max_row then
     row = math.max(0, max_row - total_height)
   end
@@ -650,8 +767,7 @@ Lualine.show_pr_info = function(pr)
     col = math.max(0, vim.o.columns - width)
   end
 
-  -- Window options
-  local opts = {
+  local win = vim.api.nvim_open_win(buf, false, {
     relative = "editor",
     width = width,
     height = height,
@@ -661,37 +777,39 @@ Lualine.show_pr_info = function(pr)
     border = "rounded",
     title = " PR Info ",
     title_pos = "center",
-  }
-
-  local win = vim.api.nvim_open_win(buf, false, opts)
+  })
   float_win:setup(win)
 
-  -- Set window options
   vim.api.nvim_set_option_value("wrap", true, { win = win })
   vim.api.nvim_set_option_value("cursorline", true, { win = win })
-  vim.wo[win].statusline = " " -- Hide status line in floating window
+  vim.wo[win].statusline = " "
   vim.api.nvim_buf_set_option(buf, "modifiable", false)
   vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
 
-  -- Key mappings to close the window
+  return win
+end
+
+--- Set up keymaps and mouse click handlers for the floating window
+---@param buf integer
+---@param ns integer
+---@param win integer
+---@param content Ghsigns.PrContent
+local function setup_float_keymaps(buf, ns, win, content)
   local close_keys = { "q", "<Esc>", "<CR>" }
   for _, key in ipairs(close_keys) do
     vim.api.nvim_buf_set_keymap(buf, "n", key, ":close<CR>", { noremap = true, silent = true })
   end
 
-  -- Mouse click handler: close button uses position check, URLs use extmarks
   vim.keymap.set("n", "<LeftRelease>", function()
     local mouse = vim.fn.getmousepos()
     if mouse.winid == win then
-      -- Check if close button was clicked
-      if mouse.line == content.close_line_idx + 1 then -- 1-indexed
+      if mouse.line == content.close_line_idx + 1 then
         float_win:close_if_valid()
         return
       end
 
-      -- Check for clickable extmarks with url property
-      local click_line = mouse.line - 1 -- 0-indexed
-      local click_col = mouse.column - 1 -- 0-indexed
+      local click_line = mouse.line - 1
+      local click_col = mouse.column - 1
       local extmarks =
         vim.api.nvim_buf_get_extmarks(buf, ns, { click_line, 0 }, { click_line + 1, 0 }, { details = true })
       for _, mark in ipairs(extmarks) do
@@ -707,6 +825,25 @@ Lualine.show_pr_info = function(pr)
       end
     end
   end, { buffer = buf, noremap = true, silent = true })
+end
+
+--- @param pr Ghsigns.Pr
+Lualine.show_pr_info = function(pr)
+  if float_win:close_if_valid() then
+    return
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  local ns = vim.api.nvim_create_namespace "ghsigns_pr_info"
+
+  local title_hl = vim.api.nvim_get_hl(0, { name = "Title" })
+  title_hl.underline = true
+  vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
+
+  local content = Lualine.build_pr_content(pr)
+  apply_content_to_buffer(buf, ns, content, pr.url)
+  local win = open_float_window(buf, content)
+  setup_float_keymaps(buf, ns, win, content)
 end
 
 return Lualine
