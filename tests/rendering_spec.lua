@@ -523,11 +523,104 @@ describe("PR content rendering", function()
   describe("PR #4 full rendering", function()
     local pr4_content
 
-    before_each(function()
-      -- stylua: ignore start
-      local body = "## Summary\n\nThis PR adds two enhancements to **ghsigns.nvim**:\n\n- Add `~~strikethrough~~` rendering support to the markdown module\n- Introduce cache utility methods (`clear`, `invalidate`, `size`) for better cache lifecycle management\n\n## Motivation\n\n> Currently, the markdown renderer handles **bold**, `inline code`, [links](https://example.com), and headings \xE2\x80\x94 but ~~it does not support strikethrough~~. GitHub-flavored Markdown uses `~~text~~` extensively in PR descriptions, so this is a useful addition.\n>\n> Additionally, the `Cache` class only supported `get` and `set`. There was no way to:\n> 1. Clear the entire cache\n> 2. Invalidate a specific entry\n> 3. Query how many entries are cached\n\n## Changes\n\n### 1. Markdown: Strikethrough support\n\nAdded `~~text~~` parsing in `lua/ghsigns/markdown.lua`:\n\n```lua\n-- Strikethrough ~~text~~ - remove markers\nlocal s, e = rendered_text:find(\"~~([^~]+)~~\", i)\nif s == i then\n  local content = rendered_text:match(\"~~([^~]+)~~\", i)\n  -- Apply DiagnosticDeprecated highlight (renders as strikethrough)\nend\n```\n\n| Feature | Syntax | Rendered as | Highlight Group |\n|---------|--------|-------------|-----------------|\n| Bold | `**text**` | **text** | `Bold` |\n| Code | `` `text` `` | `text` | `String` |\n| ~~Strikethrough~~ | `~~text~~` | ~~text~~ | `DiagnosticDeprecated` |\n| Link | `[text](url)` | [text](url) | `Underlined` |\n\n### 2. Cache: Management methods\n\nThree new methods added to `lua/ghsigns/cache.lua`:\n\n- **`Cache:clear()`** \xE2\x80\x94 Wipe all cached PR data\n- **`Cache:invalidate(git_info)`** \xE2\x80\x94 Remove a *specific* entry\n- **`Cache:size()`** \xE2\x80\x94 Return the number of cached entries\n\n### 3. Tests\n\nNew test cases in `tests/markdown_spec.lua`:\n\n- [x] Single strikethrough segment: `~~removed~~`\n- [x] Multiple strikethrough segments: `~~first~~ and ~~second~~`\n- [x] Correct highlight group assignment (`DiagnosticDeprecated`)\n- [x] Correct text extraction after marker removal\n\n## How to test\n\n```bash\n# Run all tests\nmake test\n\n# Run markdown tests only\nmake test-markdown\n```\n\n<details>\n<summary>Test output (click to expand)</summary>\n\nAll 21 tests pass:\n- Headings: 3 tests\n- Links: 2 tests\n- Bold text: 2 tests\n- Code: 2 tests\n- Issue references: 3 tests\n- List items: 3 tests\n- **Strikethrough: 2 tests** \xE2\x86\x90 NEW\n- Combined markdown: 2 tests\n- CR character handling: 2 tests\n\n</details>\n\n---\n\n> [!NOTE]\n> The `DiagnosticDeprecated` highlight group is built into Neovim (>= 0.9.0) and typically renders as strikethrough text, which makes it a natural fit for `~~text~~`.\n\n## Related\n\n- Closes #0 *(demo \xE2\x80\x94 no real issue)*\n- See also: [GitHub Flavored Markdown Spec \xE2\x80\x94 Strikethrough](https://github.github.com/gfm/#strikethrough-extension-)\n\n\xF0\x9F\xA4\x96 Generated with [Claude Code](https://claude.com/claude-code)\n"
-      -- stylua: ignore end
+    -- stylua: ignore start
+    local pr4_body = [[
+## Summary
 
+This PR adds two enhancements to **ghsigns.nvim**:
+
+- Add `~~strikethrough~~` rendering support to the markdown module
+- Introduce cache utility methods (`clear`, `invalidate`, `size`) for better cache lifecycle management
+
+## Motivation
+
+> Currently, the markdown renderer handles **bold**, `inline code`, [links](https://example.com), and headings — but ~~it does not support strikethrough~~. GitHub-flavored Markdown uses `~~text~~` extensively in PR descriptions, so this is a useful addition.
+>
+> Additionally, the `Cache` class only supported `get` and `set`. There was no way to:
+> 1. Clear the entire cache
+> 2. Invalidate a specific entry
+> 3. Query how many entries are cached
+
+## Changes
+
+### 1. Markdown: Strikethrough support
+
+Added `~~text~~` parsing in `lua/ghsigns/markdown.lua`:
+
+```lua
+-- Strikethrough ~~text~~ - remove markers
+local s, e = rendered_text:find("~~([^~]+)~~", i)
+if s == i then
+  local content = rendered_text:match("~~([^~]+)~~", i)
+  -- Apply DiagnosticDeprecated highlight (renders as strikethrough)
+end
+```
+
+| Feature | Syntax | Rendered as | Highlight Group |
+|---------|--------|-------------|-----------------|
+| Bold | `**text**` | **text** | `Bold` |
+| Code | `` `text` `` | `text` | `String` |
+| ~~Strikethrough~~ | `~~text~~` | ~~text~~ | `DiagnosticDeprecated` |
+| Link | `[text](url)` | [text](url) | `Underlined` |
+
+### 2. Cache: Management methods
+
+Three new methods added to `lua/ghsigns/cache.lua`:
+
+- **`Cache:clear()`** — Wipe all cached PR data
+- **`Cache:invalidate(git_info)`** — Remove a *specific* entry
+- **`Cache:size()`** — Return the number of cached entries
+
+### 3. Tests
+
+New test cases in `tests/markdown_spec.lua`:
+
+- [x] Single strikethrough segment: `~~removed~~`
+- [x] Multiple strikethrough segments: `~~first~~ and ~~second~~`
+- [x] Correct highlight group assignment (`DiagnosticDeprecated`)
+- [x] Correct text extraction after marker removal
+
+## How to test
+
+```bash
+# Run all tests
+make test
+
+# Run markdown tests only
+make test-markdown
+```
+
+<details>
+<summary>Test output (click to expand)</summary>
+
+All 21 tests pass:
+- Headings: 3 tests
+- Links: 2 tests
+- Bold text: 2 tests
+- Code: 2 tests
+- Issue references: 3 tests
+- List items: 3 tests
+- **Strikethrough: 2 tests** ← NEW
+- Combined markdown: 2 tests
+- CR character handling: 2 tests
+
+</details>
+
+---
+
+> [!NOTE]
+> The `DiagnosticDeprecated` highlight group is built into Neovim (>= 0.9.0) and typically renders as strikethrough text, which makes it a natural fit for `~~text~~`.
+
+## Related
+
+- Closes #0 *(demo — no real issue)*
+- See also: [GitHub Flavored Markdown Spec — Strikethrough](https://github.github.com/gfm/#strikethrough-extension-)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+]]
+    -- stylua: ignore end
+
+    before_each(function()
       pr4_content = lualine.build_pr_content {
         additions = 280,
         author = { login = "delphinus", name = "JINNOUCHI Yasushi" },
@@ -545,7 +638,7 @@ describe("PR content rendering", function()
         updatedAt = "2026-02-21T01:58:30Z",
         reviewDecision = "",
         labels = { nodes = {} },
-        body = body,
+        body = pr4_body,
       }
     end)
 
