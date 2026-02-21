@@ -567,36 +567,14 @@ Lualine.build_pr_content = function(pr)
   }
 end
 
---- @param pr Ghsigns.Pr
-Lualine.show_pr_info = function(pr)
-  -- Close existing floating window if present
-  if float_win:close_if_valid() then
-    return
-  end
-
-  -- Create a floating window
-  local buf = vim.api.nvim_create_buf(false, true)
-  local ns = vim.api.nvim_create_namespace "ghsigns_pr_info"
-
-  -- Create custom highlight group for PR title (Title + underline)
-  local title_hl = vim.api.nvim_get_hl(0, { name = "Title" })
-  title_hl.underline = true
-  vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
-
-  -- Build content
-  local content = Lualine.build_pr_content(pr)
-
+--- Apply highlights, link extmarks, and title extmark to a buffer
+---@param buf integer
+---@param ns integer
+---@param content table
+---@param pr_url? string
+local function apply_content_to_buffer(buf, ns, content, pr_url)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
 
-  -- Calculate window size
-  local width = 0
-  for _, line in ipairs(content.lines) do
-    width = math.max(width, vim.fn.strdisplaywidth(line))
-  end
-  width = math.min(width + 2, math.floor(vim.o.columns * 0.8))
-  local height = math.min(#content.lines, math.floor(vim.o.lines * 0.8))
-
-  -- Apply highlights
   for _, hl_info in ipairs(content.highlights) do
     local line_text = content.lines[hl_info.line + 1]
     if line_text then
@@ -613,7 +591,6 @@ Lualine.show_pr_info = function(pr)
     end
   end
 
-  -- Apply clickable links
   for _, link in ipairs(content.link_metadata) do
     vim.api.nvim_buf_set_extmark(buf, ns, link.line, link.col_start, {
       end_col = link.col_end,
@@ -622,27 +599,33 @@ Lualine.show_pr_info = function(pr)
     })
   end
 
-  -- Apply URL extmark to title line for hover effect
-  if pr.url then
+  if pr_url then
     vim.api.nvim_buf_set_extmark(buf, ns, content.title_line, 0, {
       end_col = #content.title_text,
-      url = pr.url,
+      url = pr_url,
     })
   end
+end
 
-  -- Get mouse position
+--- Calculate window size and position, open the floating window
+---@param buf integer
+---@param content table
+---@return integer win
+local function open_float_window(buf, content)
+  local width = 0
+  for _, line in ipairs(content.lines) do
+    width = math.max(width, vim.fn.strdisplaywidth(line))
+  end
+  width = math.min(width + 2, math.floor(vim.o.columns * 0.8))
+  local height = math.min(#content.lines, math.floor(vim.o.lines * 0.8))
+
   local mouse_pos = vim.fn.getmousepos()
   local row = mouse_pos.screenrow
   local col = mouse_pos.screencol
 
-  -- Calculate available space (excluding status line and command line)
-  -- vim.o.lines includes all lines (0-indexed rows from 0 to lines-1)
-  -- Border adds 2 rows (top and bottom), so total window height is height + 2
-  local total_height = height + 2 -- content + borders
-  local max_row = vim.o.lines - vim.o.cmdheight - 1 -- Last row before cmdline
+  local total_height = height + 2
+  local max_row = vim.o.lines - vim.o.cmdheight - 1
 
-  -- Adjust position to avoid going off screen and overlapping with status line
-  -- Ensure the bottom of the window doesn't exceed max_row
   if row + total_height > max_row then
     row = math.max(0, max_row - total_height)
   end
@@ -650,8 +633,7 @@ Lualine.show_pr_info = function(pr)
     col = math.max(0, vim.o.columns - width)
   end
 
-  -- Window options
-  local opts = {
+  local win = vim.api.nvim_open_win(buf, false, {
     relative = "editor",
     width = width,
     height = height,
@@ -661,37 +643,39 @@ Lualine.show_pr_info = function(pr)
     border = "rounded",
     title = " PR Info ",
     title_pos = "center",
-  }
-
-  local win = vim.api.nvim_open_win(buf, false, opts)
+  })
   float_win:setup(win)
 
-  -- Set window options
   vim.api.nvim_set_option_value("wrap", true, { win = win })
   vim.api.nvim_set_option_value("cursorline", true, { win = win })
-  vim.wo[win].statusline = " " -- Hide status line in floating window
+  vim.wo[win].statusline = " "
   vim.api.nvim_buf_set_option(buf, "modifiable", false)
   vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
 
-  -- Key mappings to close the window
+  return win
+end
+
+--- Set up keymaps and mouse click handlers for the floating window
+---@param buf integer
+---@param ns integer
+---@param win integer
+---@param content table
+local function setup_float_keymaps(buf, ns, win, content)
   local close_keys = { "q", "<Esc>", "<CR>" }
   for _, key in ipairs(close_keys) do
     vim.api.nvim_buf_set_keymap(buf, "n", key, ":close<CR>", { noremap = true, silent = true })
   end
 
-  -- Mouse click handler: close button uses position check, URLs use extmarks
   vim.keymap.set("n", "<LeftRelease>", function()
     local mouse = vim.fn.getmousepos()
     if mouse.winid == win then
-      -- Check if close button was clicked
-      if mouse.line == content.close_line_idx + 1 then -- 1-indexed
+      if mouse.line == content.close_line_idx + 1 then
         float_win:close_if_valid()
         return
       end
 
-      -- Check for clickable extmarks with url property
-      local click_line = mouse.line - 1 -- 0-indexed
-      local click_col = mouse.column - 1 -- 0-indexed
+      local click_line = mouse.line - 1
+      local click_col = mouse.column - 1
       local extmarks =
         vim.api.nvim_buf_get_extmarks(buf, ns, { click_line, 0 }, { click_line + 1, 0 }, { details = true })
       for _, mark in ipairs(extmarks) do
@@ -707,6 +691,25 @@ Lualine.show_pr_info = function(pr)
       end
     end
   end, { buffer = buf, noremap = true, silent = true })
+end
+
+--- @param pr Ghsigns.Pr
+Lualine.show_pr_info = function(pr)
+  if float_win:close_if_valid() then
+    return
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  local ns = vim.api.nvim_create_namespace "ghsigns_pr_info"
+
+  local title_hl = vim.api.nvim_get_hl(0, { name = "Title" })
+  title_hl.underline = true
+  vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
+
+  local content = Lualine.build_pr_content(pr)
+  apply_content_to_buffer(buf, ns, content, pr.url)
+  local win = open_float_window(buf, content)
+  setup_float_keymaps(buf, ns, win, content)
 end
 
 return Lualine
