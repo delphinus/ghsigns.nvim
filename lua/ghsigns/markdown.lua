@@ -1,10 +1,24 @@
+---@class Ghsigns.Markdown.Highlight
+---@field col integer 0-indexed start column
+---@field end_col integer 0-indexed end column
+---@field hl string highlight group name
+
+---@class Ghsigns.Markdown.Link
+---@field col_start integer 0-indexed start column
+---@field col_end integer 0-indexed end column
+---@field url string
+
+---@class Ghsigns.Markdown.Removal
+---@field start integer 0-indexed position in the input text
+---@field count integer number of characters removed
+
 ---@class Ghsigns.Markdown
 local Markdown = {}
 
 --- Adjust highlight and link positions after character removals
----@param highlights table
----@param links table
----@param removals table list of {start, count} (0-indexed positions in the input text)
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@param removals Ghsigns.Markdown.Removal[]
 ---@param hl_count integer number of highlights to adjust (from the beginning)
 ---@param link_count integer number of links to adjust (from the beginning)
 local function adjust_positions(highlights, links, removals, hl_count, link_count)
@@ -37,8 +51,8 @@ end
 ---@param pattern string The Lua pattern to match (e.g., "%*%*([^*]+)%*%*")
 ---@param hl_group string The highlight group to apply
 ---@param marker_len integer The length of each marker (e.g., 2 for ** or ~~)
----@param highlights table Existing highlights to adjust
----@param links table Existing links to adjust
+---@param highlights Ghsigns.Markdown.Highlight[] Existing highlights to adjust
+---@param links Ghsigns.Markdown.Link[] Existing links to adjust
 ---@return string processed The text with markers removed
 local function process_paired_markers(text, pattern, hl_group, marker_len, highlights, links)
   local pre_hl_count = #highlights
@@ -68,8 +82,8 @@ end
 --- Process code markers (backticks) by removing them and adding highlights
 ---@param text string The input text
 ---@param hl_group string The highlight group to apply
----@param highlights table Existing highlights to adjust
----@param links table Existing links to adjust
+---@param highlights Ghsigns.Markdown.Highlight[] Existing highlights to adjust
+---@param links Ghsigns.Markdown.Link[] Existing links to adjust
 ---@return string processed The text with backticks removed
 local function process_code_markers(text, hl_group, highlights, links)
   local pre_hl_count = #highlights
@@ -105,8 +119,8 @@ end
 ---@param text string The markdown text to render
 ---@param repo_base_url? string Optional repository base URL for issue/PR references
 ---@return string rendered_text The rendered plain text
----@return table highlights Array of highlight metadata {col, end_col, hl}
----@return table links Array of link metadata {col_start, col_end, url}
+---@return Ghsigns.Markdown.Highlight[] highlights
+---@return Ghsigns.Markdown.Link[] links
 ---@return string? special_type Special type like "heading" if applicable
 Markdown.render = function(text, repo_base_url)
   local rendered_text = text

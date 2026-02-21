@@ -125,10 +125,33 @@ local float_win = FloatWin.new()
 ---@class Ghsigns.PrData: Ghsigns.Pr
 ---@field author_name? string
 
+---@class Ghsigns.Highlight.Group
+---@field col integer 0-indexed start column
+---@field end_col integer 0-indexed end column (-1 means end of line)
+---@field hl string highlight group name
+
+---@class Ghsigns.LineHighlight
+---@field line integer 0-indexed line number
+---@field groups Ghsigns.Highlight.Group[]
+
+---@class Ghsigns.LinkMetadata
+---@field line integer 0-indexed line number
+---@field col_start integer 0-indexed start column
+---@field col_end integer 0-indexed end column
+---@field url string
+
+---@class Ghsigns.PrContent
+---@field lines string[]
+---@field highlights Ghsigns.LineHighlight[]
+---@field link_metadata Ghsigns.LinkMetadata[]
+---@field title_line integer
+---@field title_text string
+---@field close_line_idx integer
+
 ---@class Ghsigns.ContentBuilder
 ---@field lines string[]
----@field highlights table[]
----@field link_metadata table[]
+---@field highlights Ghsigns.LineHighlight[]
+---@field link_metadata Ghsigns.LinkMetadata[]
 local ContentBuilder = {}
 
 ---@return Ghsigns.ContentBuilder
@@ -141,7 +164,7 @@ function ContentBuilder.new()
 end
 
 ---@param text string
----@param hl_groups? table[]
+---@param hl_groups? Ghsigns.Highlight.Group[]
 function ContentBuilder:add_line(text, hl_groups)
   table.insert(self.lines, text)
   if hl_groups then
@@ -160,7 +183,7 @@ function ContentBuilder:add_labeled(label, value, value_hl)
   })
 end
 
----@return table content { lines, highlights, link_metadata }
+---@return Ghsigns.PrContent
 function ContentBuilder:result()
   return {
     lines = self.lines,
@@ -348,13 +371,13 @@ local function wrap_words(text, max_width)
 end
 
 --- Distribute markdown highlights across wrapped lines
----@param md_highlights table[] Highlights from markdown.render
+---@param md_highlights Ghsigns.Markdown.Highlight[]
 ---@param wrapped_lines string[] The wrapped line texts
 ---@param line_starts integer[] Start positions of each wrapped line
 ---@param indent string Indentation prefix
 ---@param quote_prefix string Blockquote prefix (may be empty)
 ---@param content_offset integer Byte offset of content within the original rendered text
----@return table[] per_line_highlights Array of highlight lists, one per wrapped line
+---@return Ghsigns.Highlight.Group[][] per_line_highlights Array of highlight lists, one per wrapped line
 local function distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset)
   local per_line = {}
   for idx, wline in ipairs(wrapped_lines) do
@@ -401,14 +424,14 @@ local function distribute_highlights(md_highlights, wrapped_lines, line_starts, 
 end
 
 --- Distribute link metadata across wrapped lines
----@param md_links table[] Links from markdown.render
+---@param md_links Ghsigns.Markdown.Link[]
 ---@param wrapped_lines string[] The wrapped line texts
 ---@param line_starts integer[] Start positions of each wrapped line
 ---@param indent string Indentation prefix
 ---@param quote_prefix string Blockquote prefix (may be empty)
 ---@param content_offset integer Byte offset of content within the original rendered text
 ---@param base_line integer Current line count in the builder (0-indexed, before adding wrapped lines)
----@return table[] link_entries Array of link_metadata entries to append
+---@return Ghsigns.LinkMetadata[] link_entries
 local function distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line)
   local entries = {}
   for idx, wline in ipairs(wrapped_lines) do
@@ -438,8 +461,8 @@ end
 --- Add a wrapped markdown line with highlights and links distributed across wrapped lines
 ---@param self Ghsigns.ContentBuilder
 ---@param rendered_text string
----@param md_highlights table[]
----@param md_links table[]
+---@param md_highlights Ghsigns.Markdown.Highlight[]
+---@param md_links Ghsigns.Markdown.Link[]
 ---@param indent string
 ---@param max_width integer
 ---@param quote_prefix string
@@ -475,8 +498,8 @@ end
 --- Add a simple (non-wrapped) markdown line with highlights and links
 ---@param self Ghsigns.ContentBuilder
 ---@param rendered_text string
----@param md_highlights table[]
----@param md_links table[]
+---@param md_highlights Ghsigns.Markdown.Highlight[]
+---@param md_links Ghsigns.Markdown.Link[]
 ---@param indent string
 function ContentBuilder:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
   local line_hls = {}
@@ -648,7 +671,7 @@ end
 
 --- Build PR content for display (extracted for testability)
 ---@param pr Ghsigns.Pr
----@return table content { lines, highlights, link_metadata, title_line, close_line_idx, title_text }
+---@return Ghsigns.PrContent
 Lualine.build_pr_content = function(pr)
   local b = ContentBuilder.new()
   local p = prepare_pr_data(pr)
@@ -665,7 +688,7 @@ end
 --- Apply highlights, link extmarks, and title extmark to a buffer
 ---@param buf integer
 ---@param ns integer
----@param content table
+---@param content Ghsigns.PrContent
 ---@param pr_url? string
 local function apply_content_to_buffer(buf, ns, content, pr_url)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
@@ -704,7 +727,7 @@ end
 
 --- Calculate window size and position, open the floating window
 ---@param buf integer
----@param content table
+---@param content Ghsigns.PrContent
 ---@return integer win
 local function open_float_window(buf, content)
   local width = 0
@@ -754,7 +777,7 @@ end
 ---@param buf integer
 ---@param ns integer
 ---@param win integer
----@param content table
+---@param content Ghsigns.PrContent
 local function setup_float_keymaps(buf, ns, win, content)
   local close_keys = { "q", "<Esc>", "<CR>" }
   for _, key in ipairs(close_keys) do
