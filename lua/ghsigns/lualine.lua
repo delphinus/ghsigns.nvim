@@ -295,6 +295,211 @@ function ContentBuilder:build_header(p)
   return title_line, title_text
 end
 
+--- Wrap text into lines at word boundaries, tracking original positions
+---@param text string The text to wrap
+---@param max_width integer Maximum display width per line
+---@return string[] wrapped_lines
+---@return integer[] line_starts 0-indexed start position of each line in the original text
+local function wrap_words(text, max_width)
+  local wrapped_lines = {}
+  local line_starts = {}
+  local current = ""
+  local current_width = 0
+  local current_start = 0
+  local char_pos = 0
+
+  local words = {}
+  local word_positions = {}
+  for word in text:gmatch "%S+" do
+    local word_start = text:find(word, char_pos + 1, true)
+    table.insert(words, word)
+    table.insert(word_positions, word_start - 1)
+    char_pos = word_start + #word - 1
+  end
+
+  for i, word in ipairs(words) do
+    local word_width = vim.fn.strdisplaywidth(word)
+    local space_width = current == "" and 0 or 1
+
+    if current_width + space_width + word_width > max_width and current ~= "" then
+      table.insert(wrapped_lines, current)
+      table.insert(line_starts, current_start)
+      current = word
+      current_start = word_positions[i]
+      current_width = word_width
+    else
+      if current ~= "" then
+        current = current .. " " .. word
+        current_width = current_width + 1 + word_width
+      else
+        current = word
+        current_start = word_positions[i]
+        current_width = word_width
+      end
+    end
+  end
+
+  if current ~= "" then
+    table.insert(wrapped_lines, current)
+    table.insert(line_starts, current_start)
+  end
+
+  return wrapped_lines, line_starts
+end
+
+--- Distribute markdown highlights across wrapped lines
+---@param md_highlights table[] Highlights from markdown.render
+---@param wrapped_lines string[] The wrapped line texts
+---@param line_starts integer[] Start positions of each wrapped line
+---@param indent string Indentation prefix
+---@param quote_prefix string Blockquote prefix (may be empty)
+---@param content_offset integer Byte offset of content within the original rendered text
+---@return table[] per_line_highlights Array of highlight lists, one per wrapped line
+local function distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset)
+  local per_line = {}
+  for idx, wline in ipairs(wrapped_lines) do
+    local line_start_pos = line_starts[idx]
+    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+    local line_hls = {}
+
+    -- Add FloatBorder highlight for blockquote prefix on continuation lines
+    if quote_prefix ~= "" and idx > 1 then
+      table.insert(line_hls, {
+        col = #indent,
+        end_col = #indent + #quote_prefix,
+        hl = "FloatBorder",
+      })
+    end
+
+    for _, hl in ipairs(md_highlights) do
+      local hl_start = hl.col - content_offset
+      local hl_end = hl.end_col - content_offset
+      local wline_end = line_start_pos + #wline
+
+      if hl.hl == "FloatBorder" and hl.col == 0 then
+        if idx == 1 then
+          table.insert(line_hls, {
+            col = #indent + hl.col,
+            end_col = #indent + hl.end_col,
+            hl = hl.hl,
+          })
+        end
+      elseif hl_end > line_start_pos and hl_start < wline_end then
+        local local_start = math.max(0, hl_start - line_start_pos)
+        local local_end = math.min(#wline, hl_end - line_start_pos)
+        table.insert(line_hls, {
+          col = local_start + #line_prefix,
+          end_col = local_end + #line_prefix,
+          hl = hl.hl,
+        })
+      end
+    end
+
+    per_line[idx] = line_hls
+  end
+  return per_line
+end
+
+--- Distribute link metadata across wrapped lines
+---@param md_links table[] Links from markdown.render
+---@param wrapped_lines string[] The wrapped line texts
+---@param line_starts integer[] Start positions of each wrapped line
+---@param indent string Indentation prefix
+---@param quote_prefix string Blockquote prefix (may be empty)
+---@param content_offset integer Byte offset of content within the original rendered text
+---@param base_line integer Current line count in the builder (0-indexed, before adding wrapped lines)
+---@return table[] link_entries Array of link_metadata entries to append
+local function distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line)
+  local entries = {}
+  for idx, wline in ipairs(wrapped_lines) do
+    local line_start_pos = line_starts[idx]
+    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+
+    for _, link in ipairs(md_links) do
+      local link_start = link.col_start - content_offset
+      local link_end = link.col_end - content_offset
+      local wline_end = line_start_pos + #wline
+
+      if link_end > line_start_pos and link_start < wline_end then
+        local local_start = math.max(0, link_start - line_start_pos)
+        local local_end = math.min(#wline, link_end - line_start_pos)
+        table.insert(entries, {
+          line = base_line + idx - 1,
+          col_start = local_start + #line_prefix,
+          col_end = local_end + #line_prefix,
+          url = link.url,
+        })
+      end
+    end
+  end
+  return entries
+end
+
+--- Add a wrapped markdown line with highlights and links distributed across wrapped lines
+---@param self Ghsigns.ContentBuilder
+---@param rendered_text string
+---@param md_highlights table[]
+---@param md_links table[]
+---@param indent string
+---@param max_width integer
+---@param quote_prefix string
+function ContentBuilder:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix)
+  local wrap_text = rendered_text
+  local content_offset = 0
+  if quote_prefix ~= "" then
+    wrap_text = rendered_text:sub(#quote_prefix + 1)
+    content_offset = #quote_prefix
+  end
+
+  local content_max_width = max_width
+  if quote_prefix ~= "" then
+    content_max_width = max_width - vim.fn.strdisplaywidth(quote_prefix)
+  end
+
+  local wrapped_lines, line_starts = wrap_words(wrap_text, content_max_width)
+  local per_line_hls = distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset)
+  local base_line = #self.lines
+  local link_entries = distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line)
+
+  for idx, wline in ipairs(wrapped_lines) do
+    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+    local line_hls = per_line_hls[idx]
+    self:add_line(line_prefix .. wline, #line_hls > 0 and line_hls or nil)
+  end
+
+  for _, entry in ipairs(link_entries) do
+    table.insert(self.link_metadata, entry)
+  end
+end
+
+--- Add a simple (non-wrapped) markdown line with highlights and links
+---@param self Ghsigns.ContentBuilder
+---@param rendered_text string
+---@param md_highlights table[]
+---@param md_links table[]
+---@param indent string
+function ContentBuilder:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
+  local line_hls = {}
+  for _, hl in ipairs(md_highlights) do
+    table.insert(line_hls, {
+      col = hl.col + #indent,
+      end_col = hl.end_col + #indent,
+      hl = hl.hl,
+    })
+  end
+
+  self:add_line(indent .. rendered_text, #line_hls > 0 and line_hls or nil)
+
+  for _, link in ipairs(md_links) do
+    table.insert(self.link_metadata, {
+      line = #self.lines - 1,
+      col_start = link.col_start + #indent,
+      col_end = link.col_end + #indent,
+      url = link.url,
+    })
+  end
+end
+
 --- Add a markdown-rendered line with wrapping support
 ---@param self Ghsigns.ContentBuilder
 ---@param text string
@@ -305,163 +510,15 @@ function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url
   local markdown = require "ghsigns.markdown"
   local rendered_text, md_highlights, md_links, special_type = markdown.render(text, repo_base_url)
 
-  -- Extract blockquote prefix for continuation lines
   local quote_prefix = ""
   if special_type == "blockquote" then
     quote_prefix = rendered_text:match "^([│ ]+)" or ""
   end
 
-  -- Wrap if necessary
-  local display_width = vim.fn.strdisplaywidth(rendered_text)
-  if display_width > max_width then
-    -- For blockquotes, wrap only the content after the prefix
-    local wrap_text = rendered_text
-    local content_offset = 0
-    if quote_prefix ~= "" then
-      wrap_text = rendered_text:sub(#quote_prefix + 1)
-      content_offset = #quote_prefix
-    end
-
-    -- Wrap the text and track positions
-    local wrapped_lines = {}
-    local line_starts = {}
-    local current = ""
-    local current_width = 0
-    local current_start = 0
-    local char_pos = 0
-
-    -- Split into words while tracking positions
-    local words = {}
-    local word_positions = {}
-    for word in wrap_text:gmatch "%S+" do
-      local word_start = wrap_text:find(word, char_pos + 1, true)
-      table.insert(words, word)
-      table.insert(word_positions, word_start - 1)
-      char_pos = word_start + #word - 1
-    end
-
-    -- Available width for content (account for prefix on continuation lines)
-    local content_max_width = max_width
-    if quote_prefix ~= "" then
-      content_max_width = max_width - vim.fn.strdisplaywidth(quote_prefix)
-    end
-
-    -- Wrap words
-    for i, word in ipairs(words) do
-      local word_width = vim.fn.strdisplaywidth(word)
-      local space_width = current == "" and 0 or 1
-
-      if current_width + space_width + word_width > content_max_width and current ~= "" then
-        table.insert(wrapped_lines, current)
-        table.insert(line_starts, current_start)
-        current = word
-        current_start = word_positions[i]
-        current_width = word_width
-      else
-        if current ~= "" then
-          current = current .. " " .. word
-          current_width = current_width + 1 + word_width
-        else
-          current = word
-          current_start = word_positions[i]
-          current_width = word_width
-        end
-      end
-    end
-
-    if current ~= "" then
-      table.insert(wrapped_lines, current)
-      table.insert(line_starts, current_start)
-    end
-
-    -- Add each wrapped line
-    for idx, wline in ipairs(wrapped_lines) do
-      local line_start_pos = line_starts[idx]
-      local line_prefix = indent
-
-      -- Prepend blockquote prefix to each wrapped line
-      if quote_prefix ~= "" then
-        line_prefix = indent .. quote_prefix
-      end
-
-      local line_hls = {}
-
-      -- Add FloatBorder highlight for blockquote prefix on continuation lines
-      if quote_prefix ~= "" and idx > 1 then
-        table.insert(line_hls, {
-          col = #indent,
-          end_col = #indent + #quote_prefix,
-          hl = "FloatBorder",
-        })
-      end
-
-      for _, hl in ipairs(md_highlights) do
-        local hl_start = hl.col - content_offset
-        local hl_end = hl.end_col - content_offset
-        local wline_end = line_start_pos + #wline
-
-        -- Skip the FloatBorder highlight for the prefix (already handled above)
-        if hl.hl == "FloatBorder" and hl.col == 0 then
-          if idx == 1 then
-            table.insert(line_hls, {
-              col = #indent + hl.col,
-              end_col = #indent + hl.end_col,
-              hl = hl.hl,
-            })
-          end
-        elseif hl_end > line_start_pos and hl_start < wline_end then
-          local local_start = math.max(0, hl_start - line_start_pos)
-          local local_end = math.min(#wline, hl_end - line_start_pos)
-          table.insert(line_hls, {
-            col = local_start + #line_prefix,
-            end_col = local_end + #line_prefix,
-            hl = hl.hl,
-          })
-        end
-      end
-
-      self:add_line(line_prefix .. wline, #line_hls > 0 and line_hls or nil)
-
-      -- Add link metadata for any wrapped line that contains a link
-      for _, link in ipairs(md_links) do
-        local link_start = link.col_start - content_offset
-        local link_end = link.col_end - content_offset
-        local wline_end = line_start_pos + #wline
-
-        if link_end > line_start_pos and link_start < wline_end then
-          local local_start = math.max(0, link_start - line_start_pos)
-          local local_end = math.min(#wline, link_end - line_start_pos)
-          table.insert(self.link_metadata, {
-            line = #self.lines - 1,
-            col_start = local_start + #line_prefix,
-            col_end = local_end + #line_prefix,
-            url = link.url,
-          })
-        end
-      end
-    end
+  if vim.fn.strdisplaywidth(rendered_text) > max_width then
+    self:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix)
   else
-    -- No wrapping needed
-    local line_hls = {}
-    for _, hl in ipairs(md_highlights) do
-      table.insert(line_hls, {
-        col = hl.col + #indent,
-        end_col = hl.end_col + #indent,
-        hl = hl.hl,
-      })
-    end
-
-    self:add_line(indent .. rendered_text, #line_hls > 0 and line_hls or nil)
-
-    -- Add link metadata
-    for _, link in ipairs(md_links) do
-      table.insert(self.link_metadata, {
-        line = #self.lines - 1,
-        col_start = link.col_start + #indent,
-        col_end = link.col_end + #indent,
-        url = link.url,
-      })
-    end
+    self:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
   end
 end
 
