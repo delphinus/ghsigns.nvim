@@ -32,6 +32,75 @@ local function adjust_positions(highlights, links, removals, hl_count, link_coun
   end
 end
 
+--- Process paired markers (bold, strikethrough) by removing markers and adding highlights
+---@param text string The input text
+---@param pattern string The Lua pattern to match (e.g., "%*%*([^*]+)%*%*")
+---@param hl_group string The highlight group to apply
+---@param marker_len integer The length of each marker (e.g., 2 for ** or ~~)
+---@param highlights table Existing highlights to adjust
+---@param links table Existing links to adjust
+---@return string processed The text with markers removed
+local function process_paired_markers(text, pattern, hl_group, marker_len, highlights, links)
+  local pre_hl_count = #highlights
+  local pre_link_count = #links
+  local removals = {}
+  local processed = ""
+  local i = 1
+  while i <= #text do
+    local s, e = text:find(pattern, i)
+    if s == i then
+      local content = text:match(pattern, i)
+      table.insert(removals, { start = s - 1, count = marker_len })
+      table.insert(removals, { start = s - 1 + marker_len + #content, count = marker_len })
+      local start_col = #processed
+      processed = processed .. content
+      table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = hl_group })
+      i = e + 1
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+  adjust_positions(highlights, links, removals, pre_hl_count, pre_link_count)
+  return processed
+end
+
+--- Process code markers (backticks) by removing them and adding highlights
+---@param text string The input text
+---@param hl_group string The highlight group to apply
+---@param highlights table Existing highlights to adjust
+---@param links table Existing links to adjust
+---@return string processed The text with backticks removed
+local function process_code_markers(text, hl_group, highlights, links)
+  local pre_hl_count = #highlights
+  local pre_link_count = #links
+  local removals = {}
+  local processed = ""
+  local i = 1
+  while i <= #text do
+    if text:sub(i, i) == "`" then
+      local e = text:find("`", i + 1)
+      if e then
+        table.insert(removals, { start = i - 1, count = 1 })
+        table.insert(removals, { start = e - 1, count = 1 })
+        local content = text:sub(i + 1, e - 1)
+        local start_col = #processed
+        processed = processed .. content
+        table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = hl_group })
+        i = e + 1
+      else
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+  adjust_positions(highlights, links, removals, pre_hl_count, pre_link_count)
+  return processed
+end
+
 --- Render markdown text to plain text with highlight and link metadata
 ---@param text string The markdown text to render
 ---@param repo_base_url? string Optional repository base URL for issue/PR references
@@ -132,81 +201,13 @@ Markdown.render = function(text, repo_base_url)
   end
 
   -- Bold **text** - remove markers
-  local pre_bold_hl_count = #highlights
-  local pre_bold_link_count = #links
-  local bold_removals = {}
-  processed = ""
-  i = 1
-  while i <= #rendered_text do
-    local s, e = rendered_text:find("%*%*([^*]+)%*%*", i)
-    if s == i then
-      local content = rendered_text:match("%*%*([^*]+)%*%*", i)
-      table.insert(bold_removals, { start = s - 1, count = 2 })
-      table.insert(bold_removals, { start = s - 1 + 2 + #content, count = 2 })
-      local start_col = #processed
-      processed = processed .. content
-      table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "Bold" })
-      i = e + 1
-    else
-      processed = processed .. rendered_text:sub(i, i)
-      i = i + 1
-    end
-  end
-  rendered_text = processed
-  adjust_positions(highlights, links, bold_removals, pre_bold_hl_count, pre_bold_link_count)
+  rendered_text = process_paired_markers(rendered_text, "%*%*([^*]+)%*%*", "Bold", 2, highlights, links)
 
   -- Strikethrough ~~text~~ - remove markers
-  local pre_strike_hl_count = #highlights
-  local pre_strike_link_count = #links
-  local strike_removals = {}
-  processed = ""
-  i = 1
-  while i <= #rendered_text do
-    local s, e = rendered_text:find("~~([^~]+)~~", i)
-    if s == i then
-      local content = rendered_text:match("~~([^~]+)~~", i)
-      table.insert(strike_removals, { start = s - 1, count = 2 })
-      table.insert(strike_removals, { start = s - 1 + 2 + #content, count = 2 })
-      local start_col = #processed
-      processed = processed .. content
-      table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "DiagnosticDeprecated" })
-      i = e + 1
-    else
-      processed = processed .. rendered_text:sub(i, i)
-      i = i + 1
-    end
-  end
-  rendered_text = processed
-  adjust_positions(highlights, links, strike_removals, pre_strike_hl_count, pre_strike_link_count)
+  rendered_text = process_paired_markers(rendered_text, "~~([^~]+)~~", "DiagnosticDeprecated", 2, highlights, links)
 
   -- Code `text` - remove backticks
-  local pre_code_hl_count = #highlights
-  local pre_code_link_count = #links
-  local code_removals = {}
-  processed = ""
-  i = 1
-  while i <= #rendered_text do
-    if rendered_text:sub(i, i) == "`" then
-      local e = rendered_text:find("`", i + 1)
-      if e then
-        table.insert(code_removals, { start = i - 1, count = 1 })
-        table.insert(code_removals, { start = e - 1, count = 1 })
-        local content = rendered_text:sub(i + 1, e - 1)
-        local start_col = #processed
-        processed = processed .. content
-        table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "String" })
-        i = e + 1
-      else
-        processed = processed .. rendered_text:sub(i, i)
-        i = i + 1
-      end
-    else
-      processed = processed .. rendered_text:sub(i, i)
-      i = i + 1
-    end
-  end
-  rendered_text = processed
-  adjust_positions(highlights, links, code_removals, pre_code_hl_count, pre_code_link_count)
+  rendered_text = process_code_markers(rendered_text, "String", highlights, links)
 
   -- Add list marker highlight if present
   if list_marker then
