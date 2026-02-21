@@ -1,4 +1,4 @@
-.PHONY: test test-markdown test-lualine
+.PHONY: test test-markdown test-lualine test-rendering
 
 PLENARY_DIR ?= $(HOME)/.local/share/nvim/lazy/plenary.nvim
 
@@ -18,3 +18,7 @@ test-markdown:
 test-lualine:
 	nvim --headless --noplugin -u tests/minimal_init.lua \
 		-c "PlenaryBustedFile tests/lualine_spec.lua"
+
+test-rendering:
+	nvim --headless --noplugin -u tests/minimal_init.lua \
+		-c "PlenaryBustedFile tests/rendering_spec.lua"

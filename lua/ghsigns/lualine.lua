@@ -126,25 +126,14 @@ local float_win = FloatWin.new()
 ---@field author_name? string
 ---@field short_body? string
 
---- @param pr Ghsigns.Pr
-Lualine.show_pr_info = function(pr)
-  -- Close existing floating window if present
-  if float_win:close_if_valid() then
-    return
-  end
+--- Build PR content for display (extracted for testability)
+---@param pr Ghsigns.Pr
+---@return table content { lines, highlights, link_metadata, title_line, close_line_idx, title_text }
+Lualine.build_pr_content = function(pr)
   local p = vim.deepcopy(pr) --[[@as Ghsigns.PrData]]
   if p.author then
     p.author_name = (p.author.name and p.author.name ~= "") and p.author.name or (p.author.login or "Unknown")
   end
-
-  -- Create a floating window
-  local buf = vim.api.nvim_create_buf(false, true)
-  local ns = vim.api.nvim_create_namespace "ghsigns_pr_info"
-
-  -- Create custom highlight group for PR title (Title + underline)
-  local title_hl = vim.api.nvim_get_hl(0, { name = "Title" })
-  title_hl.underline = true
-  vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
 
   -- Build content with metadata for highlighting
   local lines = {}
@@ -294,7 +283,7 @@ Lualine.show_pr_info = function(pr)
     indent = indent or "  "
     max_width = max_width or 80
 
-    local rendered_text, highlights, links, special_type = markdown.render(text, repo_base_url)
+    local rendered_text, md_highlights, md_links, special_type = markdown.render(text, repo_base_url)
 
     -- Extract blockquote prefix for continuation lines
     local quote_prefix = ""
@@ -388,7 +377,7 @@ Lualine.show_pr_info = function(pr)
           })
         end
 
-        for _, hl in ipairs(highlights) do
+        for _, hl in ipairs(md_highlights) do
           local hl_start = hl.col - content_offset
           local hl_end = hl.end_col - content_offset
           local wline_end = line_start_pos + #wline
@@ -418,7 +407,7 @@ Lualine.show_pr_info = function(pr)
         add_line(line_prefix .. wline, #line_hls > 0 and line_hls or nil)
 
         -- Add link metadata for any wrapped line that contains a link
-        for _, link in ipairs(links) do
+        for _, link in ipairs(md_links) do
           local link_start = link.col_start - content_offset
           local link_end = link.col_end - content_offset
           local wline_end = line_start_pos + #wline
@@ -439,7 +428,7 @@ Lualine.show_pr_info = function(pr)
     else
       -- No wrapping needed
       local line_hls = {}
-      for _, hl in ipairs(highlights) do
+      for _, hl in ipairs(md_highlights) do
         table.insert(line_hls, {
           col = hl.col + #indent,
           end_col = hl.end_col + #indent,
@@ -450,7 +439,7 @@ Lualine.show_pr_info = function(pr)
       add_line(indent .. rendered_text, #line_hls > 0 and line_hls or nil)
 
       -- Add link metadata
-      for _, link in ipairs(links) do
+      for _, link in ipairs(md_links) do
         table.insert(link_metadata, {
           line = #lines - 1,
           col_start = link.col_start + #indent,
@@ -568,19 +557,48 @@ Lualine.show_pr_info = function(pr)
   )
   local close_line_idx = #lines - 1
 
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  return {
+    lines = lines,
+    highlights = highlights,
+    link_metadata = link_metadata,
+    title_line = title_line,
+    close_line_idx = close_line_idx,
+    title_text = title_text,
+  }
+end
+
+--- @param pr Ghsigns.Pr
+Lualine.show_pr_info = function(pr)
+  -- Close existing floating window if present
+  if float_win:close_if_valid() then
+    return
+  end
+
+  -- Create a floating window
+  local buf = vim.api.nvim_create_buf(false, true)
+  local ns = vim.api.nvim_create_namespace "ghsigns_pr_info"
+
+  -- Create custom highlight group for PR title (Title + underline)
+  local title_hl = vim.api.nvim_get_hl(0, { name = "Title" })
+  title_hl.underline = true
+  vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
+
+  -- Build content
+  local content = Lualine.build_pr_content(pr)
+
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
 
   -- Calculate window size
   local width = 0
-  for _, line in ipairs(lines) do
+  for _, line in ipairs(content.lines) do
     width = math.max(width, vim.fn.strdisplaywidth(line))
   end
   width = math.min(width + 2, math.floor(vim.o.columns * 0.8))
-  local height = math.min(#lines, math.floor(vim.o.lines * 0.8))
+  local height = math.min(#content.lines, math.floor(vim.o.lines * 0.8))
 
   -- Apply highlights
-  for _, hl_info in ipairs(highlights) do
-    local line_text = lines[hl_info.line + 1]
+  for _, hl_info in ipairs(content.highlights) do
+    local line_text = content.lines[hl_info.line + 1]
     if line_text then
       for _, group in ipairs(hl_info.groups) do
         local end_col = group.end_col
@@ -596,7 +614,7 @@ Lualine.show_pr_info = function(pr)
   end
 
   -- Apply clickable links
-  for _, link in ipairs(link_metadata) do
+  for _, link in ipairs(content.link_metadata) do
     vim.api.nvim_buf_set_extmark(buf, ns, link.line, link.col_start, {
       end_col = link.col_end,
       hl_group = "Underlined",
@@ -605,10 +623,10 @@ Lualine.show_pr_info = function(pr)
   end
 
   -- Apply URL extmark to title line for hover effect
-  if p.url then
-    vim.api.nvim_buf_set_extmark(buf, ns, title_line, 0, {
-      end_col = #title_text,
-      url = p.url,
+  if pr.url then
+    vim.api.nvim_buf_set_extmark(buf, ns, content.title_line, 0, {
+      end_col = #content.title_text,
+      url = pr.url,
     })
   end
 
@@ -666,7 +684,7 @@ Lualine.show_pr_info = function(pr)
     local mouse = vim.fn.getmousepos()
     if mouse.winid == win then
       -- Check if close button was clicked
-      if mouse.line == close_line_idx + 1 then -- 1-indexed
+      if mouse.line == content.close_line_idx + 1 then -- 1-indexed
         float_win:close_if_valid()
         return
       end
