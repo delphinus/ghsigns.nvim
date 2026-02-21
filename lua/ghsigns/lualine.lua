@@ -203,13 +203,12 @@ local function prepare_pr_data(pr)
   return p
 end
 
---- Build the header section (title, branches, metadata, dates)
+--- Add title line with optional DRAFT indicator
 ---@param self Ghsigns.ContentBuilder
 ---@param p Ghsigns.PrData
 ---@return integer title_line
 ---@return string title_text
-function ContentBuilder:build_header(p)
-  -- Title with Draft indicator
+function ContentBuilder:add_title_line(p)
   local title_prefix = (p.isDraft == true) and "[DRAFT] " or ""
   local title_text = "#" .. (p.number or 0) .. " " .. title_prefix .. (p.title or "")
   local number_str = tostring(p.number or 0)
@@ -224,49 +223,13 @@ function ContentBuilder:build_header(p)
     table.insert(title_hls, { col = #number_str + 2, end_col = -1, hl = "GhsignsPrTitle" })
   end
   self:add_line(title_text, title_hls)
-  local title_line = #self.lines - 1
+  return #self.lines - 1, title_text
+end
 
-  -- Branches
-  if p.baseRefName and p.headRefName then
-    local branch_info = string.format("%s ← %s", p.baseRefName, p.headRefName)
-    self:add_line(branch_info, {
-      { col = 0, end_col = #p.baseRefName, hl = "String" },
-      { col = #p.baseRefName + 1, end_col = #p.baseRefName + 3, hl = "Operator" },
-      { col = #p.baseRefName + 4, end_col = -1, hl = "Identifier" },
-    })
-  end
-
-  self:add_line ""
-
-  -- Author
-  if p.author_name then
-    self:add_labeled("Author", p.author_name, "String")
-  end
-
-  -- State
-  if p.state then
-    local state_hl = p.state == "OPEN" and "DiagnosticOk" or "DiagnosticError"
-    self:add_labeled("State", p.state, state_hl)
-  end
-
-  -- Review Decision
-  if p.reviewDecision and p.reviewDecision ~= "" then
-    local review_hl = "DiagnosticWarn"
-    if p.reviewDecision == "APPROVED" then
-      review_hl = "DiagnosticOk"
-    elseif p.reviewDecision == "CHANGES_REQUESTED" then
-      review_hl = "DiagnosticError"
-    end
-    self:add_labeled("Review", p.reviewDecision:gsub("_", " "), review_hl)
-  end
-
-  -- Mergeable
-  if p.mergeable and p.mergeable ~= "" then
-    local merge_hl = p.mergeable == "MERGEABLE" and "DiagnosticOk" or "DiagnosticError"
-    self:add_labeled("Mergeable", p.mergeable, merge_hl)
-  end
-
-  -- Changes
+--- Add changes line with diff-colored highlights
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+function ContentBuilder:add_changes_line(p)
   local commit_count = 0
   if p.commits then
     if p.commits.nodes then
@@ -293,18 +256,50 @@ function ContentBuilder:build_header(p)
     { col = minus_start, end_col = minus_end, hl = "DiffDelete" },
     { col = minus_end + 1, end_col = -1, hl = "Comment" },
   })
+end
 
-  -- Labels
+--- Add metadata fields (Author, State, Review, Mergeable, Changes, Labels)
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+function ContentBuilder:add_metadata_fields(p)
+  if p.author_name then
+    self:add_labeled("Author", p.author_name, "String")
+  end
+
+  if p.state then
+    local state_hl = p.state == "OPEN" and "DiagnosticOk" or "DiagnosticError"
+    self:add_labeled("State", p.state, state_hl)
+  end
+
+  if p.reviewDecision and p.reviewDecision ~= "" then
+    local review_hl = "DiagnosticWarn"
+    if p.reviewDecision == "APPROVED" then
+      review_hl = "DiagnosticOk"
+    elseif p.reviewDecision == "CHANGES_REQUESTED" then
+      review_hl = "DiagnosticError"
+    end
+    self:add_labeled("Review", p.reviewDecision:gsub("_", " "), review_hl)
+  end
+
+  if p.mergeable and p.mergeable ~= "" then
+    local merge_hl = p.mergeable == "MERGEABLE" and "DiagnosticOk" or "DiagnosticError"
+    self:add_labeled("Mergeable", p.mergeable, merge_hl)
+  end
+
+  self:add_changes_line(p)
+
   if p.labels and p.labels.nodes and #p.labels.nodes > 0 then
     local label_names = vim.tbl_map(function(label)
       return label.name
     end, p.labels.nodes)
     self:add_labeled("Labels", table.concat(label_names, ", "), "Tag")
   end
+end
 
-  self:add_line ""
-
-  -- Dates
+--- Add date fields (Created, Updated, Merged)
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+function ContentBuilder:add_date_fields(p)
   if p.createdAt then
     self:add_labeled("Created", p.createdAt, "DiagnosticHint")
   end
@@ -314,6 +309,29 @@ function ContentBuilder:build_header(p)
   if p.mergedAt then
     self:add_labeled("Merged", p.mergedAt, "DiagnosticOk")
   end
+end
+
+--- Build the header section (title, branches, metadata, dates)
+---@param self Ghsigns.ContentBuilder
+---@param p Ghsigns.PrData
+---@return integer title_line
+---@return string title_text
+function ContentBuilder:build_header(p)
+  local title_line, title_text = self:add_title_line(p)
+
+  if p.baseRefName and p.headRefName then
+    local branch_info = string.format("%s ← %s", p.baseRefName, p.headRefName)
+    self:add_line(branch_info, {
+      { col = 0, end_col = #p.baseRefName, hl = "String" },
+      { col = #p.baseRefName + 1, end_col = #p.baseRefName + 3, hl = "Operator" },
+      { col = #p.baseRefName + 4, end_col = -1, hl = "Identifier" },
+    })
+  end
+
+  self:add_line ""
+  self:add_metadata_fields(p)
+  self:add_line ""
+  self:add_date_fields(p)
 
   return title_line, title_text
 end
@@ -581,6 +599,27 @@ local function wrap_line(text, max_width, indent)
   return lines_out
 end
 
+--- Normalize body text: fix line endings, strip HTML, compress blank lines
+---@param body string
+---@return string[]
+local function normalize_body(body)
+  local text = body:gsub("\r\n", "\n"):gsub("\r", "\n")
+  text = text:gsub("<!%-%-.-%-%->", "")
+  text = text:gsub("<[^>]+>", "")
+
+  local raw_lines = vim.split(text, "\n")
+  local cleaned = {}
+  local prev_blank = false
+  for _, line in ipairs(raw_lines) do
+    local is_blank = line:match "^%s*$" ~= nil
+    if not (is_blank and prev_blank) then
+      table.insert(cleaned, line)
+    end
+    prev_blank = is_blank
+  end
+  return cleaned
+end
+
 --- Build the body section (description with markdown rendering)
 ---@param self Ghsigns.ContentBuilder
 ---@param p Ghsigns.PrData
@@ -589,7 +628,6 @@ function ContentBuilder:build_body(p)
     return
   end
 
-  -- Extract base repository URL from PR URL
   local repo_base_url = nil
   if p.url then
     repo_base_url = p.url:match "(https://[^/]+/[^/]+/[^/]+)"
@@ -598,28 +636,7 @@ function ContentBuilder:build_body(p)
   self:add_line ""
   self:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
 
-  -- Normalize line endings (remove CR)
-  local normalized_body = p.body:gsub("\r\n", "\n"):gsub("\r", "\n")
-
-  -- Remove HTML comments
-  normalized_body = normalized_body:gsub("<!%-%-.-%-%->", "")
-
-  -- Remove HTML tags
-  normalized_body = normalized_body:gsub("<[^>]+>", "")
-
-  local body_lines = vim.split(normalized_body, "\n")
-
-  -- Remove consecutive blank lines
-  local cleaned_lines = {}
-  local prev_blank = false
-  for _, line in ipairs(body_lines) do
-    local is_blank = line:match "^%s*$" ~= nil
-    if not (is_blank and prev_blank) then
-      table.insert(cleaned_lines, line)
-    end
-    prev_blank = is_blank
-  end
-
+  local cleaned_lines = normalize_body(p.body)
   local in_code_block = false
   local lines_shown = 0
   local max_lines = 15
@@ -628,7 +645,6 @@ function ContentBuilder:build_body(p)
   for _, body_line in ipairs(cleaned_lines) do
     local lines_before = #self.lines
 
-    -- Code blocks ```
     if body_line:match "^```" then
       in_code_block = not in_code_block
       self:add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "Comment" } })

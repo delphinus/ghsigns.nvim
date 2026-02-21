@@ -115,6 +115,88 @@ local function process_code_markers(text, hl_group, highlights, links)
   return processed
 end
 
+--- Process [text](url) links: remove markers and produce highlight/link entries
+---@param text string
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string processed
+local function process_links(text, highlights, links)
+  local processed = ""
+  local i = 1
+  while i <= #text do
+    local s, e = text:find("%[([^%]]+)%]%([^%)]+%)", i)
+    if s == i then
+      local link_text = text:match("%[([^%]]+)%]%([^%)]+%)", i)
+      local url = text:match("%[[^%]]+%]%(([^%)]+)%)", i)
+      local start_col = #processed
+      processed = processed .. link_text
+      table.insert(highlights, { col = start_col, end_col = start_col + #link_text, hl = "Underlined" })
+      table.insert(links, { col_start = start_col, col_end = start_col + #link_text, url = url })
+      i = e + 1
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+  return processed
+end
+
+--- Process #123 issue/PR references: make them clickable (skip inside backticks)
+---@param text string
+---@param repo_base_url string
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string processed
+local function process_issue_refs(text, repo_base_url, highlights, links)
+  local processed = ""
+  local i = 1
+  local in_backtick = false
+  while i <= #text do
+    if text:sub(i, i) == "`" then
+      in_backtick = not in_backtick
+      processed = processed .. "`"
+      i = i + 1
+    else
+      local s, e = text:find("#%d+", i)
+      if s == i and not in_backtick then
+        local issue_num = text:match("#(%d+)", i)
+        local issue_text = "#" .. issue_num
+        local url = repo_base_url .. "/issues/" .. issue_num
+        local start_col = #processed
+        processed = processed .. issue_text
+        table.insert(highlights, { col = start_col, end_col = start_col + #issue_text, hl = "Underlined" })
+        table.insert(links, { col_start = start_col, col_end = start_col + #issue_text, url = url })
+        i = e + 1
+      else
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
+    end
+  end
+  return processed
+end
+
+--- Prepend blockquote visual prefix and shift all highlight/link positions
+---@param text string
+---@param quote_prefix string
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string
+local function apply_blockquote_prefix(text, quote_prefix, highlights, links)
+  local offset = #quote_prefix
+  text = quote_prefix .. text
+  table.insert(highlights, 1, { col = 0, end_col = offset, hl = "FloatBorder" })
+  for idx = 2, #highlights do
+    highlights[idx].col = highlights[idx].col + offset
+    highlights[idx].end_col = highlights[idx].end_col + offset
+  end
+  for _, link in ipairs(links) do
+    link.col_start = link.col_start + offset
+    link.col_end = link.col_end + offset
+  end
+  return text
+end
+
 --- Render markdown text to plain text with highlight and link metadata
 ---@param text string The markdown text to render
 ---@param repo_base_url? string Optional repository base URL for issue/PR references
@@ -123,14 +205,11 @@ end
 ---@return Ghsigns.Markdown.Link[] links
 ---@return string? special_type Special type like "heading" if applicable
 Markdown.render = function(text, repo_base_url)
-  local rendered_text = text
+  local rendered_text = text:gsub("\r", "")
   local highlights = {}
   local links = {}
 
-  -- Remove CR characters
-  rendered_text = rendered_text:gsub("\r", "")
-
-  -- Heading (# ## ###) - remove prefix
+  -- Heading (# ## ###) - early return
   local heading_content = rendered_text:match "^#+%s+(.+)$"
   if heading_content then
     rendered_text = heading_content
@@ -138,7 +217,7 @@ Markdown.render = function(text, repo_base_url)
     return rendered_text, highlights, links, "heading"
   end
 
-  -- Blockquote (> ) - replace prefix with visual bar
+  -- Blockquote (> ) - extract prefix
   local quote_prefix = ""
   local is_blockquote = false
   while rendered_text:match "^>%s?" do
@@ -147,100 +226,27 @@ Markdown.render = function(text, repo_base_url)
     is_blockquote = true
   end
 
-  -- List items (- * 1.) - keep the marker
-  local list_marker, list_content = rendered_text:match "^(%s*[-*]%s)(.*)$"
-  if not list_marker then
-    list_marker, list_content = rendered_text:match "^(%s*%d+%.%s)(.*)$"
-  end
+  -- List items (- * 1.) - detect marker
+  local list_marker = rendered_text:match "^(%s*[-*]%s)"
+    or rendered_text:match "^(%s*%d+%.%s)"
 
-  -- Process inline markdown elements
-  local processed = ""
-
-  -- Links [text](url) - show only text, make it clickable (process first to avoid conflicts)
-  local i = 1
-  while i <= #rendered_text do
-    local s, e = rendered_text:find("%[([^%]]+)%]%([^%)]+%)", i)
-    if s == i then
-      local link_text = rendered_text:match("%[([^%]]+)%]%([^%)]+%)", i)
-      local url = rendered_text:match("%[[^%]]+%]%(([^%)]+)%)", i)
-      local start_col = #processed
-      processed = processed .. link_text
-      table.insert(highlights, { col = start_col, end_col = start_col + #link_text, hl = "Underlined" })
-      table.insert(links, {
-        col_start = start_col,
-        col_end = start_col + #link_text,
-        url = url,
-      })
-      i = e + 1
-    else
-      processed = processed .. rendered_text:sub(i, i)
-      i = i + 1
-    end
-  end
-  rendered_text = processed
-
-  -- Issue/PR references #123 - make them clickable (but not inside backticks)
+  -- Process inline elements
+  rendered_text = process_links(rendered_text, highlights, links)
   if repo_base_url then
-    processed = ""
-    i = 1
-    local in_backtick = false
-    while i <= #rendered_text do
-      -- Track backticks to avoid processing #123 inside code
-      if rendered_text:sub(i, i) == "`" then
-        in_backtick = not in_backtick
-        processed = processed .. "`"
-        i = i + 1
-      else
-        local s, e = rendered_text:find("#%d+", i)
-        if s == i and not in_backtick then
-          local issue_num = rendered_text:match("#(%d+)", i)
-          local issue_text = "#" .. issue_num
-          local url = repo_base_url .. "/issues/" .. issue_num
-          local start_col = #processed
-          processed = processed .. issue_text
-          table.insert(highlights, { col = start_col, end_col = start_col + #issue_text, hl = "Underlined" })
-          table.insert(links, {
-            col_start = start_col,
-            col_end = start_col + #issue_text,
-            url = url,
-          })
-          i = e + 1
-        else
-          processed = processed .. rendered_text:sub(i, i)
-          i = i + 1
-        end
-      end
-    end
-    rendered_text = processed
+    rendered_text = process_issue_refs(rendered_text, repo_base_url, highlights, links)
   end
-
-  -- Bold **text** - remove markers
   rendered_text = process_paired_markers(rendered_text, "%*%*([^*]+)%*%*", "Bold", 2, highlights, links)
-
-  -- Strikethrough ~~text~~ - remove markers
   rendered_text = process_paired_markers(rendered_text, "~~([^~]+)~~", "DiagnosticDeprecated", 2, highlights, links)
-
-  -- Code `text` - remove backticks
   rendered_text = process_code_markers(rendered_text, "String", highlights, links)
 
-  -- Add list marker highlight if present
+  -- Add list marker highlight
   if list_marker then
     table.insert(highlights, 1, { col = 0, end_col = #list_marker, hl = "Special" })
   end
 
-  -- Prepend blockquote prefix and shift all positions
+  -- Prepend blockquote prefix
   if is_blockquote then
-    local offset = #quote_prefix
-    rendered_text = quote_prefix .. rendered_text
-    table.insert(highlights, 1, { col = 0, end_col = offset, hl = "FloatBorder" })
-    for idx = 2, #highlights do
-      highlights[idx].col = highlights[idx].col + offset
-      highlights[idx].end_col = highlights[idx].end_col + offset
-    end
-    for _, link in ipairs(links) do
-      link.col_start = link.col_start + offset
-      link.col_end = link.col_end + offset
-    end
+    rendered_text = apply_blockquote_prefix(rendered_text, quote_prefix, highlights, links)
     return rendered_text, highlights, links, "blockquote"
   end
 
