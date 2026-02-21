@@ -1,6 +1,37 @@
 ---@class Ghsigns.Markdown
 local Markdown = {}
 
+--- Adjust highlight and link positions after character removals
+---@param highlights table
+---@param links table
+---@param removals table list of {start, count} (0-indexed positions in the input text)
+---@param hl_count integer number of highlights to adjust (from the beginning)
+---@param link_count integer number of links to adjust (from the beginning)
+local function adjust_positions(highlights, links, removals, hl_count, link_count)
+  if #removals == 0 then
+    return
+  end
+  local function adjust(pos)
+    local shift = 0
+    for _, r in ipairs(removals) do
+      if pos >= r.start + r.count then
+        shift = shift + r.count
+      elseif pos > r.start then
+        shift = shift + (pos - r.start)
+      end
+    end
+    return pos - shift
+  end
+  for i = 1, hl_count do
+    highlights[i].col = adjust(highlights[i].col)
+    highlights[i].end_col = adjust(highlights[i].end_col)
+  end
+  for i = 1, link_count do
+    links[i].col_start = adjust(links[i].col_start)
+    links[i].col_end = adjust(links[i].col_end)
+  end
+end
+
 --- Render markdown text to plain text with highlight and link metadata
 ---@param text string The markdown text to render
 ---@param repo_base_url? string Optional repository base URL for issue/PR references
@@ -22,6 +53,15 @@ Markdown.render = function(text, repo_base_url)
     rendered_text = heading_content
     table.insert(highlights, { col = 0, end_col = #rendered_text, hl = "Title" })
     return rendered_text, highlights, links, "heading"
+  end
+
+  -- Blockquote (> ) - replace prefix with visual bar
+  local quote_prefix = ""
+  local is_blockquote = false
+  while rendered_text:match "^>%s?" do
+    rendered_text = rendered_text:gsub("^>%s?", "", 1)
+    quote_prefix = quote_prefix .. "│ "
+    is_blockquote = true
   end
 
   -- List items (- * 1.) - keep the marker
@@ -92,12 +132,17 @@ Markdown.render = function(text, repo_base_url)
   end
 
   -- Bold **text** - remove markers
+  local pre_bold_hl_count = #highlights
+  local pre_bold_link_count = #links
+  local bold_removals = {}
   processed = ""
   i = 1
   while i <= #rendered_text do
     local s, e = rendered_text:find("%*%*([^*]+)%*%*", i)
     if s == i then
       local content = rendered_text:match("%*%*([^*]+)%*%*", i)
+      table.insert(bold_removals, { start = s - 1, count = 2 })
+      table.insert(bold_removals, { start = s - 1 + 2 + #content, count = 2 })
       local start_col = #processed
       processed = processed .. content
       table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "Bold" })
@@ -108,14 +153,44 @@ Markdown.render = function(text, repo_base_url)
     end
   end
   rendered_text = processed
+  adjust_positions(highlights, links, bold_removals, pre_bold_hl_count, pre_bold_link_count)
+
+  -- Strikethrough ~~text~~ - remove markers
+  local pre_strike_hl_count = #highlights
+  local pre_strike_link_count = #links
+  local strike_removals = {}
+  processed = ""
+  i = 1
+  while i <= #rendered_text do
+    local s, e = rendered_text:find("~~([^~]+)~~", i)
+    if s == i then
+      local content = rendered_text:match("~~([^~]+)~~", i)
+      table.insert(strike_removals, { start = s - 1, count = 2 })
+      table.insert(strike_removals, { start = s - 1 + 2 + #content, count = 2 })
+      local start_col = #processed
+      processed = processed .. content
+      table.insert(highlights, { col = start_col, end_col = start_col + #content, hl = "DiagnosticDeprecated" })
+      i = e + 1
+    else
+      processed = processed .. rendered_text:sub(i, i)
+      i = i + 1
+    end
+  end
+  rendered_text = processed
+  adjust_positions(highlights, links, strike_removals, pre_strike_hl_count, pre_strike_link_count)
 
   -- Code `text` - remove backticks
+  local pre_code_hl_count = #highlights
+  local pre_code_link_count = #links
+  local code_removals = {}
   processed = ""
   i = 1
   while i <= #rendered_text do
     if rendered_text:sub(i, i) == "`" then
       local e = rendered_text:find("`", i + 1)
       if e then
+        table.insert(code_removals, { start = i - 1, count = 1 })
+        table.insert(code_removals, { start = e - 1, count = 1 })
         local content = rendered_text:sub(i + 1, e - 1)
         local start_col = #processed
         processed = processed .. content
@@ -131,10 +206,27 @@ Markdown.render = function(text, repo_base_url)
     end
   end
   rendered_text = processed
+  adjust_positions(highlights, links, code_removals, pre_code_hl_count, pre_code_link_count)
 
   -- Add list marker highlight if present
   if list_marker then
     table.insert(highlights, 1, { col = 0, end_col = #list_marker, hl = "Special" })
+  end
+
+  -- Prepend blockquote prefix and shift all positions
+  if is_blockquote then
+    local offset = #quote_prefix
+    rendered_text = quote_prefix .. rendered_text
+    table.insert(highlights, 1, { col = 0, end_col = offset, hl = "FloatBorder" })
+    for idx = 2, #highlights do
+      highlights[idx].col = highlights[idx].col + offset
+      highlights[idx].end_col = highlights[idx].end_col + offset
+    end
+    for _, link in ipairs(links) do
+      link.col_start = link.col_start + offset
+      link.col_end = link.col_end + offset
+    end
+    return rendered_text, highlights, links, "blockquote"
   end
 
   return rendered_text, highlights, links, nil

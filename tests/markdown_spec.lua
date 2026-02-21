@@ -141,6 +141,63 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Strikethrough", function()
+    it("should remove ~~ markers from strikethrough text", function()
+      local text, highlights = markdown.render("This is ~~removed~~ text")
+      eq("This is removed text", text)
+      local strike_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "DiagnosticDeprecated" then
+          strike_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(strike_hl)
+      eq("removed", text:sub(strike_hl.col + 1, strike_hl.end_col))
+    end)
+
+    it("should handle multiple strikethrough segments", function()
+      local text = markdown.render("~~first~~ and ~~second~~")
+      eq("first and second", text)
+    end)
+  end)
+
+  describe("Blockquote", function()
+    it("should replace > prefix with visual bar", function()
+      local text, highlights, links, special_type = markdown.render("> Quoted text")
+      eq("│ Quoted text", text)
+      eq("blockquote", special_type)
+      eq({ col = 0, end_col = #"│ ", hl = "FloatBorder" }, highlights[1])
+    end)
+
+    it("should handle nested blockquotes", function()
+      local text, highlights, links, special_type = markdown.render(">> Nested quote")
+      eq("│ │ Nested quote", text)
+      eq("blockquote", special_type)
+      eq({ col = 0, end_col = #"│ │ ", hl = "FloatBorder" }, highlights[1])
+    end)
+
+    it("should process inline markdown inside blockquotes", function()
+      local text, highlights = markdown.render("> This is **bold** text")
+      eq("│ This is bold text", text)
+      local bold_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Bold" then
+          bold_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(bold_hl)
+      eq("bold", text:sub(bold_hl.col + 1, bold_hl.end_col))
+    end)
+
+    it("should handle empty blockquote lines", function()
+      local text, highlights, links, special_type = markdown.render(">")
+      eq("│ ", text)
+      eq("blockquote", special_type)
+    end)
+  end)
+
   describe("Combined markdown", function()
     it("should handle links and bold together", function()
       local text = markdown.render("**Important**: See [docs](https://example.com)")
@@ -151,6 +208,27 @@ describe("Markdown rendering", function()
       local text, highlights, links = markdown.render("Run `npm test` for #123", "https://github.com/owner/repo")
       eq("Run npm test for #123", text)
       eq(1, #links)
+    end)
+
+    it("should correctly position link highlight after bold and code markers are removed", function()
+      local text, highlights, links =
+        markdown.render("**bold**, `inline code`, [links](https://example.com), and headings")
+      eq("bold, inline code, links, and headings", text)
+
+      -- Find the Underlined highlight for "links"
+      local link_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Underlined" then
+          link_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(link_hl)
+      eq("links", text:sub(link_hl.col + 1, link_hl.end_col))
+
+      -- Also verify link metadata position matches
+      eq(1, #links)
+      eq("links", text:sub(links[1].col_start + 1, links[1].col_end))
     end)
   end)
 
