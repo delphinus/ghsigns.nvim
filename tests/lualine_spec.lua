@@ -109,6 +109,75 @@ describe("Lualine module", function()
   end)
 end)
 
+describe("supports_osc8", function()
+  local pr_display
+  local saved_env
+
+  before_each(function()
+    package.loaded["ghsigns.pr_display"] = nil
+    package.loaded["ghsigns.content_builder"] = nil
+    pr_display = require "ghsigns.pr_display"
+
+    saved_env = {
+      TERM_PROGRAM = vim.env.TERM_PROGRAM,
+      VTE_VERSION = vim.env.VTE_VERSION,
+      WT_SESSION = vim.env.WT_SESSION,
+    }
+    vim.env.TERM_PROGRAM = nil
+    vim.env.VTE_VERSION = nil
+    vim.env.WT_SESSION = nil
+    pr_display._reset_osc8_cache()
+  end)
+
+  after_each(function()
+    vim.env.TERM_PROGRAM = saved_env.TERM_PROGRAM
+    vim.env.VTE_VERSION = saved_env.VTE_VERSION
+    vim.env.WT_SESSION = saved_env.WT_SESSION
+    pr_display._reset_osc8_cache()
+
+    package.loaded["ghsigns.pr_display"] = nil
+    package.loaded["ghsigns.content_builder"] = nil
+  end)
+
+  it("should return true for known OSC 8 terminals", function()
+    local terminals = { "iTerm.app", "WezTerm", "kitty", "foot", "contour", "rio", "alacritty", "ghostty" }
+    for _, term in ipairs(terminals) do
+      vim.env.TERM_PROGRAM = term
+      pr_display._reset_osc8_cache()
+      assert.is_true(pr_display._supports_osc8(), "Expected true for " .. term)
+    end
+  end)
+
+  it("should return true for VTE-based terminals", function()
+    vim.env.VTE_VERSION = "7200"
+    assert.is_true(pr_display._supports_osc8())
+  end)
+
+  it("should return true for Windows Terminal", function()
+    vim.env.WT_SESSION = "some-session-id"
+    assert.is_true(pr_display._supports_osc8())
+  end)
+
+  it("should return false for unknown terminals", function()
+    vim.env.TERM_PROGRAM = "unknown_terminal"
+    assert.is_false(pr_display._supports_osc8())
+  end)
+
+  it("should return false when no terminal env vars are set", function()
+    assert.is_false(pr_display._supports_osc8())
+  end)
+
+  it("should cache the result", function()
+    vim.env.TERM_PROGRAM = "WezTerm"
+    assert.is_true(pr_display._supports_osc8())
+
+    -- Change env after caching
+    vim.env.TERM_PROGRAM = nil
+    -- Should still return cached result
+    assert.is_true(pr_display._supports_osc8())
+  end)
+end)
+
 describe("PrDisplay module", function()
   local pr_display
 
