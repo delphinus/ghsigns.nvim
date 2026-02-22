@@ -5,6 +5,49 @@ local prepare_pr_data = cb.prepare_pr_data
 
 local float_win = FloatWin.new()
 
+local _osc8_supported = nil
+
+--- Check if the terminal supports OSC 8 hyperlinks
+---@return boolean
+local function supports_osc8()
+  if _osc8_supported ~= nil then
+    return _osc8_supported
+  end
+
+  local term = vim.env.TERM_PROGRAM
+  if term then
+    local osc8_terminals = {
+      ["iTerm.app"] = true,
+      ["WezTerm"] = true,
+      ["kitty"] = true,
+      ["foot"] = true,
+      ["contour"] = true,
+      ["rio"] = true,
+      ["alacritty"] = true,
+      ["ghostty"] = true,
+    }
+    if osc8_terminals[term] then
+      _osc8_supported = true
+      return true
+    end
+  end
+
+  -- VTE-based terminals (GNOME Terminal, etc.)
+  if vim.env.VTE_VERSION then
+    _osc8_supported = true
+    return true
+  end
+
+  -- Windows Terminal
+  if vim.env.WT_SESSION then
+    _osc8_supported = true
+    return true
+  end
+
+  _osc8_supported = false
+  return false
+end
+
 local PrDisplay = {}
 
 --- Build PR content for display (extracted for testability)
@@ -130,18 +173,22 @@ local function setup_float_keymaps(buf, ns, win, content)
         return
       end
 
-      local click_line = mouse.line - 1
-      local click_col = mouse.column - 1
-      local extmarks =
-        vim.api.nvim_buf_get_extmarks(buf, ns, { click_line, 0 }, { click_line + 1, 0 }, { details = true })
-      for _, mark in ipairs(extmarks) do
-        local _, _, start_col, details = unpack(mark)
-        if details.url then
-          local end_col = details.end_col or (start_col + 1)
-          if click_col >= start_col and click_col < end_col then
-            vim.notify("Opening: " .. details.url, vim.log.levels.INFO)
-            vim.ui.open(details.url)
-            return
+      -- In OSC 8 terminals, the terminal handles link clicks natively.
+      -- Only use Neovim-level link handling as a fallback for non-OSC 8 terminals.
+      if not supports_osc8() then
+        local click_line = mouse.line - 1
+        local click_col = mouse.column - 1
+        local extmarks =
+          vim.api.nvim_buf_get_extmarks(buf, ns, { click_line, 0 }, { click_line + 1, 0 }, { details = true })
+        for _, mark in ipairs(extmarks) do
+          local _, _, start_col, details = unpack(mark)
+          if details.url then
+            local end_col = details.end_col or (start_col + 1)
+            if click_col >= start_col and click_col < end_col then
+              vim.notify("Opening: " .. details.url, vim.log.levels.INFO)
+              vim.ui.open(details.url)
+              return
+            end
           end
         end
       end
@@ -166,6 +213,12 @@ PrDisplay.show_pr_info = function(pr)
   apply_content_to_buffer(buf, ns, content, pr.url)
   local win = open_float_window(buf, content)
   setup_float_keymaps(buf, ns, win, content)
+end
+
+-- Exported for testing
+PrDisplay._supports_osc8 = supports_osc8
+PrDisplay._reset_osc8_cache = function()
+  _osc8_supported = nil
 end
 
 return PrDisplay
