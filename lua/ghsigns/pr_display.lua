@@ -52,12 +52,13 @@ local PrDisplay = {}
 
 --- Build PR content for display (extracted for testability)
 ---@param pr Ghsigns.Pr
+---@param opts? { max_body_lines?: integer }
 ---@return Ghsigns.PrContent
-PrDisplay.build_pr_content = function(pr)
+PrDisplay.build_pr_content = function(pr, opts)
   local b = ContentBuilder.new()
   local p = prepare_pr_data(pr)
   local title_line, title_text = b:build_header(p)
-  b:build_body(p)
+  b:build_body(p, opts)
   local close_line_idx = b:build_footer()
   local result = b:result()
   result.title_line = title_line
@@ -236,7 +237,8 @@ local function setup_float_keymaps(buf, ns, win, content)
 end
 
 --- @param pr Ghsigns.Pr
-PrDisplay.show_pr_info = function(pr)
+--- @param opts? { max_body_lines?: integer }
+PrDisplay.show_pr_info = function(pr, opts)
   if float_win:close_if_valid() then
     return
   end
@@ -248,10 +250,75 @@ PrDisplay.show_pr_info = function(pr)
   title_hl.underline = true
   vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
 
-  local content = PrDisplay.build_pr_content(pr)
+  local content = PrDisplay.build_pr_content(pr, opts)
   apply_content_to_buffer(buf, ns, content, pr.url)
   local win = open_float_window(buf, content)
   setup_float_keymaps(buf, ns, win, content)
+end
+
+--- Show a demo floating window with all supported Markdown notations
+PrDisplay.show_demo = function()
+  local demo_body = table.concat({
+    "## Heading Example",
+    "",
+    "This is **bold text** and this is `inline code` in a paragraph.",
+    "",
+    "Visit [Neovim](https://neovim.io) for more info. Also see ~~deprecated feature~~.",
+    "",
+    "Related to #123 and #456.",
+    "",
+    "- Unordered item 1",
+    "- Unordered item 2",
+    "- Unordered item 3",
+    "",
+    "1. Ordered item one",
+    "2. Ordered item two",
+    "3. Ordered item three",
+    "",
+    "> Blockquote line 1",
+    "> Blockquote line 2",
+    ">> Nested blockquote",
+    "",
+    "```lua",
+    'local M = {}',
+    "",
+    "function M.greet(name)",
+    '  return "Hello, " .. name',
+    "end",
+    "",
+    "return M",
+    "```",
+    "",
+    "```",
+    "Plain code block without language.",
+    "Should use String highlight as fallback.",
+    "```",
+    "",
+    "Combined: **bold** with `code` and [link](https://example.com) on one line.",
+  }, "\n")
+
+  local demo_pr = {
+    number = 42,
+    title = "Markdown Rendering Demo",
+    isDraft = true,
+    author = { login = "demo-user", name = "Demo User" },
+    headRefName = "feat/markdown-demo",
+    baseRefName = "main",
+    state = "OPEN",
+    reviewDecision = "APPROVED",
+    mergeable = "MERGEABLE",
+    additions = 128,
+    deletions = 32,
+    changedFiles = 5,
+    commits = { nodes = { {}, {}, {} } },
+    labels = { nodes = { { name = "enhancement" }, { name = "documentation" } } },
+    createdAt = "2025-01-15T10:30:00Z",
+    updatedAt = "2025-01-16T14:20:00Z",
+    url = "https://github.com/demo/repo/pull/42",
+    body = demo_body,
+  }
+
+  PrDisplay.show_pr_info(demo_pr, { max_body_lines = math.huge })
 end
 
 -- Exported for testing

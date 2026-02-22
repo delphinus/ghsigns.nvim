@@ -592,7 +592,8 @@ end
 --- Build the body section (description with markdown rendering)
 ---@param self Ghsigns.ContentBuilder
 ---@param p Ghsigns.PrData
-function ContentBuilder:build_body(p)
+---@param opts? { max_body_lines?: integer }
+function ContentBuilder:build_body(p, opts)
   if not p.body or p.body == "" then
     return
   end
@@ -610,7 +611,7 @@ function ContentBuilder:build_body(p)
   local code_block_lang = nil
   local code_block_start = nil
   local lines_shown = 0
-  local max_lines = 15
+  local max_lines = (opts and opts.max_body_lines) or 15
   local max_width = 80
   local prev_was_heading = false
   local prev_was_blank = false
