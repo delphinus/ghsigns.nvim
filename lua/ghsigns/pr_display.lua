@@ -66,6 +66,43 @@ PrDisplay.build_pr_content = function(pr)
   return result
 end
 
+--- Apply treesitter syntax highlighting to code blocks
+---@param buf integer
+---@param ns integer
+---@param content Ghsigns.PrContent
+local function apply_treesitter_highlights(buf, ns, content)
+  for _, block in ipairs(content.code_blocks or {}) do
+    local code_lines = {}
+    for i = block.start_line, block.end_line do
+      local line = content.lines[i + 1] or ""
+      table.insert(code_lines, line:sub(3)) -- remove "  " indent
+    end
+    local code_text = table.concat(code_lines, "\n")
+
+    local ok, parser = pcall(vim.treesitter.get_string_parser, code_text, block.language)
+    if not ok or not parser then goto continue end
+
+    local trees = parser:parse()
+    if not trees or #trees == 0 then goto continue end
+
+    local query = vim.treesitter.query.get(block.language, "highlights")
+    if not query then goto continue end
+
+    for id, node in query:iter_captures(trees[1]:root(), code_text) do
+      local name = query.captures[id]
+      local sr, sc, er, ec = node:range()
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns, block.start_line + sr, sc + 2, {
+        end_row = block.start_line + er,
+        end_col = ec + 2,
+        hl_group = "@" .. name .. "." .. block.language,
+        priority = 110,
+      })
+    end
+
+    ::continue::
+  end
+end
+
 --- Apply highlights, link extmarks, and title extmark to a buffer
 ---@param buf integer
 ---@param ns integer
@@ -104,6 +141,8 @@ local function apply_content_to_buffer(buf, ns, content, pr_url)
       url = pr_url,
     })
   end
+
+  apply_treesitter_highlights(buf, ns, content)
 end
 
 --- Calculate window size and position, open the floating window

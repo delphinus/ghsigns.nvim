@@ -369,17 +369,29 @@ describe("PR content rendering", function()
       }, hl_for_line(c, 6))
     end)
 
-    it("should render code blocks with Comment/String highlights", function()
+    it("should render code blocks with fence lines hidden and String highlight", function()
       local c = build_with_body "```lua\nlocal x = 1\n```"
-      eq("  ```lua", c.lines[7])
-      eq("  local x = 1", c.lines[8])
-      eq("  ```", c.lines[9])
-      -- Code block delimiters get Comment highlight
-      eq({ { col = 0, end_col = -1, hl = "Comment" } }, hl_for_line(c, 6))
-      -- Code block content gets String highlight
-      eq({ { col = 0, end_col = -1, hl = "String" } }, hl_for_line(c, 7))
-      -- Closing delimiter gets Comment highlight
-      eq({ { col = 0, end_col = -1, hl = "Comment" } }, hl_for_line(c, 8))
+      eq("  local x = 1", c.lines[7])
+      -- Fence lines are hidden, code content gets String highlight
+      eq({ { col = 0, end_col = -1, hl = "String" } }, hl_for_line(c, 6))
+    end)
+
+    it("should record code_blocks metadata for language-tagged code blocks", function()
+      local c = build_with_body "```lua\nlocal x = 1\nlocal y = 2\n```"
+      eq(1, #c.code_blocks)
+      eq("lua", c.code_blocks[1].language)
+      eq(6, c.code_blocks[1].start_line)
+      eq(7, c.code_blocks[1].end_line)
+    end)
+
+    it("should not record code_blocks for language-untagged code blocks", function()
+      local c = build_with_body "```\nsome code\n```"
+      eq(0, #c.code_blocks)
+    end)
+
+    it("should not record code_blocks for empty code blocks", function()
+      local c = build_with_body "```lua\n```"
+      eq(0, #c.code_blocks)
     end)
 
     it("should render blockquote with FloatBorder highlight", function()
@@ -559,11 +571,11 @@ describe("PR content rendering", function()
     end)
 
     it("should wrap CJK text in code blocks", function()
-      -- Code block with CJK content exceeding 80 cols
+      -- Code block with CJK content exceeding 80 cols (fence lines hidden)
       local code = "```\n" .. string.rep("あ", 42) .. "\n```"
       local c = build_with_body(code)
-      eq("  " .. string.rep("あ", 40), c.lines[8])
-      eq("  " .. string.rep("あ", 2), c.lines[9])
+      eq("  " .. string.rep("あ", 40), c.lines[7])
+      eq("  " .. string.rep("あ", 2), c.lines[8])
     end)
   end)
 

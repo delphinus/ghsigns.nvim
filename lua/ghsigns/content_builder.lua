@@ -16,10 +16,16 @@
 ---@field col_end integer 0-indexed end column
 ---@field url string
 
+---@class Ghsigns.CodeBlock
+---@field language string
+---@field start_line integer 0-indexed, first code line
+---@field end_line integer   0-indexed, last code line
+
 ---@class Ghsigns.PrContent
 ---@field lines string[]
 ---@field highlights Ghsigns.LineHighlight[]
 ---@field link_metadata Ghsigns.LinkMetadata[]
+---@field code_blocks Ghsigns.CodeBlock[]
 ---@field title_line integer
 ---@field title_text string
 ---@field close_line_idx integer
@@ -28,6 +34,7 @@
 ---@field lines string[]
 ---@field highlights Ghsigns.LineHighlight[]
 ---@field link_metadata Ghsigns.LinkMetadata[]
+---@field code_blocks Ghsigns.CodeBlock[]
 local ContentBuilder = {}
 
 ---@return Ghsigns.ContentBuilder
@@ -36,6 +43,7 @@ function ContentBuilder.new()
     lines = {},
     highlights = {},
     link_metadata = {},
+    code_blocks = {},
   }, { __index = ContentBuilder })
 end
 
@@ -65,6 +73,7 @@ function ContentBuilder:result()
     lines = self.lines,
     highlights = self.highlights,
     link_metadata = self.link_metadata,
+    code_blocks = self.code_blocks,
   }
 end
 
@@ -598,6 +607,8 @@ function ContentBuilder:build_body(p)
 
   local cleaned_lines = normalize_body(p.body)
   local in_code_block = false
+  local code_block_lang = nil
+  local code_block_start = nil
   local lines_shown = 0
   local max_lines = 15
   local max_width = 80
@@ -627,8 +638,22 @@ function ContentBuilder:build_body(p)
     local lines_before = #self.lines
 
     if body_line:match "^```" then
-      in_code_block = not in_code_block
-      self:add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "Comment" } })
+      if not in_code_block then
+        in_code_block = true
+        code_block_lang = body_line:match "^```(%S+)" or nil
+        code_block_start = #self.lines -- 0-indexed position of next code line
+      else
+        if code_block_lang and code_block_start < #self.lines then
+          table.insert(self.code_blocks, {
+            language = code_block_lang,
+            start_line = code_block_start,
+            end_line = #self.lines - 1,
+          })
+        end
+        in_code_block = false
+        code_block_lang = nil
+      end
+      -- Don't call add_line: fence lines are hidden and don't count toward lines_shown
     elseif in_code_block then
       local display_width = vim.fn.strdisplaywidth(body_line)
       if display_width > max_width then
