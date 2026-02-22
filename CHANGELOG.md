@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-02-22
+
+### Fixed
+
+- Fix CJK (Japanese, Chinese, Korean) text causing floating window to expand
+  horizontally instead of wrapping properly. Added segment-based text splitting
+  that treats each CJK/fullwidth character as an individual wrapping unit.
+
 ## [1.0.0] - 2026-02-22
 
 ### Added
@@ -42,4 +50,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   rendering, lualine component, and OSC 8 detection
 - CI pipeline with GitHub Actions
 
+[1.0.1]: https://github.com/delphinus/ghsigns.nvim/releases/tag/v1.0.1
 [1.0.0]: https://github.com/delphinus/ghsigns.nvim/releases/tag/v1.0.0
