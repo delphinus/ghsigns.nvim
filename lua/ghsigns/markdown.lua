@@ -247,10 +247,10 @@ Markdown.render = function(text, repo_base_url)
   -- Prepend blockquote prefix
   if is_blockquote then
     rendered_text = apply_blockquote_prefix(rendered_text, quote_prefix, highlights, links)
-    return rendered_text, highlights, links, "blockquote"
+    return rendered_text, highlights, links, "blockquote", list_marker
   end
 
-  return rendered_text, highlights, links, nil
+  return rendered_text, highlights, links, nil, list_marker
 end
 
 return Markdown

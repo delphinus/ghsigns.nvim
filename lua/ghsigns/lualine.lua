@@ -29,7 +29,7 @@ Lualine.component = function()
       return table.concat({
         hl.icon .. "",
         hl.head .. git.head,
-        hl.arrow .. "←",
+        hl.arrow .. "→",
         ("%s%s #%d"):format(hl.base, revision, pr.number),
       }, " ")
     elseif git then
