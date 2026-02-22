@@ -1,0 +1,276 @@
+*ghsigns.txt*	Integrate gitsigns.nvim with GitHub CLI for PR information
+
+Author:  delphinus <me@delphinus.dev>
+License: MIT
+
+==============================================================================
+CONTENTS						*ghsigns-contents*
+
+Introduction		|ghsigns-introduction|
+Requirements		|ghsigns-requirements|
+Setup			|ghsigns-setup|
+Configuration		|ghsigns-configuration|
+Lualine Integration	|ghsigns-lualine|
+Floating Window		|ghsigns-floating-window|
+Lua API			|ghsigns-api|
+Highlight Groups	|ghsigns-highlights|
+Demo			|ghsigns-demo|
+
+==============================================================================
+INTRODUCTION						*ghsigns-introduction*
+
+ghsigns.nvim integrates |gitsigns.nvim| with GitHub CLI (`gh`) to
+automatically display Pull Request information in your statusline and show
+diffs against the PR's base branch.
+
+- Automatically fetches PR info for the current branch using `gh`
+- Displays branch name and PR number in |lualine.nvim| with colored highlights
+- Single-click to view PR details in a floating window
+- Double-click to open the PR in your browser
+- Markdown-rendered PR description with treesitter syntax highlighting
+- Clickable links and issue references
+- Automatically changes diff base to the PR's base branch
+
+==============================================================================
+REQUIREMENTS						*ghsigns-requirements*
+
+- Neovim >= 0.9.0
+- gitsigns.nvim (https://github.com/lewis6991/gitsigns.nvim) (required)
+- GitHub CLI `gh` (https://cli.github.com/) (required, must be authenticated)
+- lualine.nvim (https://github.com/nvim-lualine/lualine.nvim) (optional)
+
+==============================================================================
+SETUP							*ghsigns-setup*
+
+Using lazy.nvim: >lua
+    {
+      "delphinus/ghsigns.nvim",
+      dependencies = {
+        "lewis6991/gitsigns.nvim",
+      },
+      config = function()
+        require("ghsigns").setup()
+      end,
+    }
+<
+
+==============================================================================
+CONFIGURATION						*ghsigns-configuration*
+
+						*ghsigns.setup()*
+require("ghsigns").setup({opts})
+
+    Initialize the plugin with optional configuration.
+
+    Parameters: ~
+      {opts}  (table|nil) Configuration options. See |ghsigns-config|.
+
+						*ghsigns-config*
+    Fields: ~
+      {bin}     (string)  Path to the `gh` binary.
+                          Default: `"gh"`
+
+      {colors}  (table)   Colors for the Lualine component.
+                          See |ghsigns-config-colors|.
+
+						*ghsigns-config-colors*
+    Color fields: ~
+
+      Each field is a table with `fg` (string, hex color) and optional `bg`
+      (string, hex color).
+
+      {icon}   Color for the git branch icon ().
+               Default: `{ fg = "#dddde7" }`
+
+      {head}   Color for the current branch name.
+               Default: `{ fg = "#d087e8" }`
+
+      {arrow}  Color for the arrow symbol ().
+               Default: `{ fg = "#e7a06a" }`
+
+      {base}   Color for the base branch name and PR number.
+               Default: `{ fg = "#73a3f3" }`
+
+    Example: >lua
+      require("ghsigns").setup({
+        bin = "gh",
+        colors = {
+          icon = { fg = "#dddde7" },
+          head = { fg = "#d087e8" },
+          arrow = { fg = "#e7a06a" },
+          base = { fg = "#73a3f3" },
+        },
+      })
+<
+
+==============================================================================
+LUALINE INTEGRATION					*ghsigns-lualine*
+
+Add the ghsigns component to your Lualine configuration: >lua
+    require("lualine").setup({
+      sections = {
+        lualine_b = {
+          require("ghsigns.lualine").component(),
+        },
+      },
+    })
+<
+The component displays:
+
+    `  main`                          No PR on this branch
+    `  feature-branch  main #123`    PR #123 targeting main
+
+Mouse interactions: ~
+
+    Single-click   Show PR details in a floating window
+    Double-click   Open PR URL in your browser
+
+==============================================================================
+FLOATING WINDOW						*ghsigns-floating-window*
+
+The floating window displays detailed PR information:
+
+    - Title with draft indicator and PR number
+    - Branch info (head  base)
+    - Author, state, review decision, mergeable status
+    - Changes (+additions -deletions, files, commits)
+    - Labels
+    - Created, updated, and merged dates
+    - Markdown-rendered PR description
+
+Keymaps (buffer-local): ~
+
+    `q`        Close the window
+    `<Esc>`    Close the window
+    `<CR>`     Close the window
+
+The floating window also closes when clicking outside of it.
+
+Markdown rendering: ~
+
+    The PR description supports the following Markdown elements:
+
+    - Headings (`##`)              |Title| highlight
+    - Bold (`**text**`)            |Bold| highlight
+    - Inline code (`` `code` ``)   |String| highlight
+    - Links (`[text](url)`)        |Underlined|, clickable
+    - Strikethrough (`~~text~~`)   |DiagnosticDeprecated| highlight
+    - Issue references (`#123`)    |Underlined|, clickable link to GitHub
+    - Unordered lists (`- item`)   |Special| marker highlight
+    - Ordered lists (`1. item`)    |Special| marker highlight
+    - Blockquotes (`> text`)       FloatBorder prefix, supports nesting
+    - Code blocks with language    Treesitter syntax highlighting
+    - Code blocks without language |String| highlight fallback
+
+    Lines exceeding 80 characters are wrapped at word boundaries with
+    CJK/fullwidth character support.  The body is truncated to 15 lines
+    by default with a "... (truncated)" indicator.
+
+Link handling: ~
+
+    In terminals that support OSC 8 hyperlinks (iTerm2, WezTerm, kitty,
+    foot, contour, rio, alacritty, ghostty, VTE-based terminals, Windows
+    Terminal), links are handled natively by the terminal.
+
+    In other terminals, clicking on a highlighted link opens it via
+    |vim.ui.open()|.
+
+==============================================================================
+LUA API							*ghsigns-api*
+
+						*ghsigns-api-setup*
+require("ghsigns").setup({opts})
+    See |ghsigns.setup()|.
+
+						*ghsigns-api-lualine*
+require("ghsigns.lualine").component()
+    Returns a Lualine component table.
+    See |ghsigns-lualine|.
+
+require("ghsigns.lualine").get_info()
+    Returns: ~
+      {git_info}  (table|nil) Git repository info (root, head, revision)
+      {pr}        (table|nil) PR data for the current buffer
+
+require("ghsigns.lualine").on_click({clicks})
+    Handle mouse click events on the Lualine component.
+
+    Parameters: ~
+      {clicks}  (integer) Number of clicks (1 = single, 2 = double)
+
+						*ghsigns-api-pr-display*
+require("ghsigns.pr_display").show_pr_info({pr}, {opts})
+    Show PR information in a floating window.
+
+    Parameters: ~
+      {pr}    (table)      PR data table (as returned by `gh pr view --json`)
+      {opts}  (table|nil)  Options table.
+        {max_body_lines}  (integer|nil) Maximum number of body lines to show.
+                          Default: 15.
+
+require("ghsigns.pr_display").build_pr_content({pr}, {opts})
+    Build rendered PR content without displaying it.
+
+    Parameters: ~
+      {pr}    (table)      PR data table.
+      {opts}  (table|nil)  Same as |ghsigns-api-pr-display|.
+
+    Returns: ~
+      {content}  (table) Rendered content with lines, highlights,
+                 link_metadata, code_blocks, title_line, title_text,
+                 and close_line_idx.
+
+require("ghsigns.pr_display").show_demo()
+    Show a demo floating window. See |ghsigns-demo|.
+
+==============================================================================
+HIGHLIGHT GROUPS					*ghsigns-highlights*
+
+The following highlight groups are defined by the plugin:
+
+    *GhsignsPrTitle*
+        PR title in the floating window.  Extends |hl-Title| with underline.
+
+The following standard highlight groups are used in the floating window:
+
+    Group                   Usage ~
+    |hl-Bold|                 Bold text in markdown
+    |hl-Comment|              Labels, metadata keys, truncation indicator
+    |hl-DiagnosticDeprecated| Strikethrough text
+    |hl-DiagnosticError|      CLOSED/MERGED state, CHANGES_REQUESTED, unmergeable
+    |hl-DiagnosticHint|       Dates (Created, Updated)
+    |hl-DiagnosticOk|         OPEN state, APPROVED, MERGEABLE, Merged date
+    |hl-DiagnosticWarn|       Pending review decision
+    |hl-DiffAdd|              Addition count (+N)
+    |hl-DiffDelete|           Deletion count (-N)
+    |hl-ErrorMsg|             Close button icon
+    |hl-FloatBorder|          Blockquote borders
+    |hl-Identifier|           Head branch name
+    |hl-Number|               PR number
+    |hl-Operator|             Branch arrow symbol
+    |hl-Special|              List markers (-, *, 1.)
+    |hl-String|               Code blocks, base branch name, Author value
+    |hl-Title|                Markdown headings
+    |hl-Underlined|           Links and issue references
+    |hl-WarningMsg|           [DRAFT] indicator
+    Tag                     Labels
+
+==============================================================================
+DEMO							*ghsigns-demo*
+
+To visually verify all Markdown rendering features, run: >vim
+    :lua require("ghsigns.pr_display").show_demo()
+<
+This opens a floating window with a dummy PR containing all supported
+Markdown notations:  headings, bold, inline code, links, strikethrough,
+issue references, unordered and ordered lists, blockquotes (including
+nested), code blocks with and without language specification, and combined
+inline formatting.
+
+The demo is useful for:
+- Verifying treesitter code block highlighting
+- Checking highlight group appearance with your colorscheme
+- Testing floating window layout and wrapping behavior
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
