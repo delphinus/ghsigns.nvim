@@ -500,6 +500,74 @@ describe("PR content rendering", function()
   end)
 
   ---------------------------------------------------------------------------
+  -- Group 3b: CJK line wrapping
+  ---------------------------------------------------------------------------
+  describe("CJK line wrapping", function()
+    it("should wrap pure CJK text at character boundaries", function()
+      -- 42 CJK chars = 84 display columns (each char is 2 cols wide)
+      -- max_width=80 means first 40 chars (80 cols) fit, then remaining 2 chars
+      local cjk = string.rep("あ", 42)
+      local c = build_with_body(cjk)
+      eq("  " .. string.rep("あ", 40), c.lines[7])
+      eq("  " .. string.rep("あ", 2), c.lines[8])
+    end)
+
+    it("should wrap mixed CJK and ASCII text", function()
+      -- "Hello " (6 cols) + 38 CJK chars (76 cols) = 82 cols, wraps at 80
+      -- "Hello " + 37 CJK (74 cols) = 80 cols on line 1, then 1 CJK on line 2
+      local mixed = "Hello " .. string.rep("あ", 38)
+      local c = build_with_body(mixed)
+      eq("  Hello " .. string.rep("あ", 37), c.lines[7])
+      eq("  " .. string.rep("あ", 1), c.lines[8])
+    end)
+
+    it("should preserve bold highlight positions in CJK text", function()
+      -- "**太字**のテスト" -> rendered as "太字のテスト" with bold on "太字"
+      -- Total: 12 display cols (fits in 80), so no wrapping needed
+      local c = build_with_body("**太字**のテスト")
+      eq("  太字のテスト", c.lines[7])
+      eq({
+        { col = 2, end_col = 8, hl = "Bold" },
+      }, hl_for_line(c, 6))
+    end)
+
+    it("should wrap CJK text inside blockquotes", function()
+      -- "│ " prefix takes 2 display cols; content area = 80 - 2 = 78 cols
+      -- 40 CJK chars = 80 display cols > 78 cols, so wraps
+      -- 39 CJK chars (78 cols) fit, then 1 char on next line
+      local bq = "> " .. string.rep("あ", 40)
+      local c = build_with_body(bq)
+      eq("  │ " .. string.rep("あ", 39), c.lines[7])
+      eq("  │ " .. string.rep("あ", 1), c.lines[8])
+      -- Blockquote prefix highlighted on both lines
+      eq({ col = 2, end_col = 6, hl = "FloatBorder" }, hl_for_line(c, 6)[1])
+      eq({ col = 2, end_col = 6, hl = "FloatBorder" }, hl_for_line(c, 7)[1])
+    end)
+
+    it("should preserve link highlight positions after CJK wrapping", function()
+      -- Long CJK text with a link that ends up on wrapped line
+      local text = string.rep("あ", 38) .. "[リンク](https://example.com)"
+      local c = build_with_body(text)
+      -- 38 "あ" = 76 cols. Link text "リンク" = 3 CJK chars, each wrapped individually.
+      -- "リ" (78 cols), "ン" (80 cols), "ク" -> 82 > 80, wraps.
+      -- Line 1: 38 "あ" + "リン" = 80 cols
+      -- Line 2: "ク" = 2 cols
+      -- The link "リンク" spans two lines -> 2 link_metadata entries
+      eq(2, #c.link_metadata)
+      eq("https://example.com", c.link_metadata[1].url)
+      eq("https://example.com", c.link_metadata[2].url)
+    end)
+
+    it("should wrap CJK text in code blocks", function()
+      -- Code block with CJK content exceeding 80 cols
+      local code = "```\n" .. string.rep("あ", 42) .. "\n```"
+      local c = build_with_body(code)
+      eq("  " .. string.rep("あ", 40), c.lines[8])
+      eq("  " .. string.rep("あ", 2), c.lines[9])
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
   -- Group 4: Truncation
   ---------------------------------------------------------------------------
   describe("Truncation", function()
