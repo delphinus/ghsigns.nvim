@@ -157,7 +157,7 @@ function ContentBuilder:add_metadata_fields(p)
     self:add_labeled("Review", p.reviewDecision:gsub("_", " "), review_hl)
   end
 
-  if p.mergeable and p.mergeable ~= "" then
+  if p.state == "OPEN" and p.mergeable and p.mergeable ~= "" then
     local merge_hl = p.mergeable == "MERGEABLE" and "DiagnosticOk" or "DiagnosticError"
     self:add_labeled("Mergeable", p.mergeable, merge_hl)
   end
@@ -196,11 +196,11 @@ function ContentBuilder:build_header(p)
   local title_line, title_text = self:add_title_line(p)
 
   if p.baseRefName and p.headRefName then
-    local branch_info = string.format("%s ← %s", p.baseRefName, p.headRefName)
+    local branch_info = string.format("%s → %s", p.headRefName, p.baseRefName)
     self:add_line(branch_info, {
-      { col = 0, end_col = #p.baseRefName, hl = "String" },
-      { col = #p.baseRefName + 1, end_col = #p.baseRefName + 3, hl = "Operator" },
-      { col = #p.baseRefName + 4, end_col = -1, hl = "Identifier" },
+      { col = 0, end_col = #p.headRefName, hl = "Identifier" },
+      { col = #p.headRefName + 1, end_col = #p.headRefName + 3, hl = "Operator" },
+      { col = #p.headRefName + 4, end_col = -1, hl = "String" },
     })
   end
 
@@ -314,12 +314,16 @@ end
 ---@param indent string Indentation prefix
 ---@param quote_prefix string Blockquote prefix (may be empty)
 ---@param content_offset integer Byte offset of content within the original rendered text
+---@param list_prefix_len? integer Byte length of list marker prefix (0 if none)
 ---@return Ghsigns.Highlight.Group[][] per_line_highlights Array of highlight lists, one per wrapped line
-local function distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset)
+local function distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset, list_prefix_len)
+  list_prefix_len = list_prefix_len or 0
   local per_line = {}
   for idx, wline in ipairs(wrapped_lines) do
     local line_start_pos = line_starts[idx]
-    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+    local prefix_len = #quote_prefix + list_prefix_len
+    local line_prefix = (quote_prefix ~= "" and (indent .. quote_prefix) or indent)
+        .. (idx == 1 and "" or string.rep(" ", list_prefix_len))
     local line_hls = {}
 
     -- Add FloatBorder highlight for blockquote prefix on continuation lines
@@ -334,9 +338,18 @@ local function distribute_highlights(md_highlights, wrapped_lines, line_starts, 
     for _, hl in ipairs(md_highlights) do
       local hl_start = hl.col - content_offset
       local hl_end = hl.end_col - content_offset
-      local wline_end = line_start_pos + #wline
 
-      if hl.hl == "FloatBorder" and hl.col == 0 then
+      -- "Special" highlights (list markers) that end at or before the content start
+      -- should only appear on line 1 with their original positions
+      if hl.end_col <= content_offset and hl.hl == "Special" then
+        if idx == 1 then
+          table.insert(line_hls, {
+            col = #indent + #quote_prefix + hl.col,
+            end_col = #indent + #quote_prefix + hl.end_col,
+            hl = hl.hl,
+          })
+        end
+      elseif hl.hl == "FloatBorder" and hl.col == 0 then
         if idx == 1 then
           table.insert(line_hls, {
             col = #indent + hl.col,
@@ -344,14 +357,17 @@ local function distribute_highlights(md_highlights, wrapped_lines, line_starts, 
             hl = hl.hl,
           })
         end
-      elseif hl_end > line_start_pos and hl_start < wline_end then
-        local local_start = math.max(0, hl_start - line_start_pos)
-        local local_end = math.min(#wline, hl_end - line_start_pos)
-        table.insert(line_hls, {
-          col = local_start + #line_prefix,
-          end_col = local_end + #line_prefix,
-          hl = hl.hl,
-        })
+      else
+        local wline_end = line_start_pos + #wline
+        if hl_end > line_start_pos and hl_start < wline_end then
+          local local_start = math.max(0, hl_start - line_start_pos)
+          local local_end = math.min(#wline, hl_end - line_start_pos)
+          table.insert(line_hls, {
+            col = local_start + #line_prefix,
+            end_col = local_end + #line_prefix,
+            hl = hl.hl,
+          })
+        end
       end
     end
 
@@ -368,12 +384,15 @@ end
 ---@param quote_prefix string Blockquote prefix (may be empty)
 ---@param content_offset integer Byte offset of content within the original rendered text
 ---@param base_line integer Current line count in the builder (0-indexed, before adding wrapped lines)
+---@param list_prefix_len? integer Byte length of list marker prefix (0 if none)
 ---@return Ghsigns.LinkMetadata[] link_entries
-local function distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line)
+local function distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line, list_prefix_len)
+  list_prefix_len = list_prefix_len or 0
   local entries = {}
   for idx, wline in ipairs(wrapped_lines) do
     local line_start_pos = line_starts[idx]
-    local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+    local line_prefix = (quote_prefix ~= "" and (indent .. quote_prefix) or indent)
+        .. (idx == 1 and "" or string.rep(" ", list_prefix_len))
 
     for _, link in ipairs(md_links) do
       local link_start = link.col_start - content_offset
@@ -403,7 +422,8 @@ end
 ---@param indent string
 ---@param max_width integer
 ---@param quote_prefix string
-function ContentBuilder:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix)
+---@param list_marker? string
+function ContentBuilder:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix, list_marker)
   local wrap_text = rendered_text
   local content_offset = 0
   if quote_prefix ~= "" then
@@ -411,20 +431,35 @@ function ContentBuilder:add_wrapped_markdown(rendered_text, md_highlights, md_li
     content_offset = #quote_prefix
   end
 
+  -- Strip list marker from wrap_text so wrapping is based on content only
+  local list_prefix_len = 0
+  if list_marker and list_marker ~= "" then
+    wrap_text = wrap_text:sub(#list_marker + 1)
+    content_offset = content_offset + #list_marker
+    list_prefix_len = #list_marker
+  end
+
   local content_max_width = max_width
   if quote_prefix ~= "" then
     content_max_width = max_width - vim.fn.strdisplaywidth(quote_prefix)
   end
+  if list_prefix_len > 0 then
+    content_max_width = content_max_width - vim.fn.strdisplaywidth(list_marker)
+  end
 
   local wrapped_lines, line_starts = wrap_words(wrap_text, content_max_width)
-  local per_line_hls = distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset)
+  local per_line_hls = distribute_highlights(md_highlights, wrapped_lines, line_starts, indent, quote_prefix, content_offset, list_prefix_len)
   local base_line = #self.lines
-  local link_entries = distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line)
+  local link_entries = distribute_links(md_links, wrapped_lines, line_starts, indent, quote_prefix, content_offset, base_line, list_prefix_len)
+
+  local list_prefix = list_marker or ""
+  local list_continuation = string.rep(" ", list_prefix_len)
 
   for idx, wline in ipairs(wrapped_lines) do
     local line_prefix = quote_prefix ~= "" and (indent .. quote_prefix) or indent
+    local lm = idx == 1 and list_prefix or list_continuation
     local line_hls = per_line_hls[idx]
-    self:add_line(line_prefix .. wline, #line_hls > 0 and line_hls or nil)
+    self:add_line(line_prefix .. lm .. wline, #line_hls > 0 and line_hls or nil)
   end
 
   for _, entry in ipairs(link_entries) do
@@ -468,7 +503,7 @@ end
 ---@param repo_base_url? string
 function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url)
   local markdown = require "ghsigns.markdown"
-  local rendered_text, md_highlights, md_links, special_type = markdown.render(text, repo_base_url)
+  local rendered_text, md_highlights, md_links, special_type, list_marker = markdown.render(text, repo_base_url)
 
   local quote_prefix = ""
   if special_type == "blockquote" then
@@ -476,7 +511,7 @@ function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url
   end
 
   if vim.fn.strdisplaywidth(rendered_text) > max_width then
-    self:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix)
+    self:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix, list_marker)
   else
     self:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
   end
@@ -566,8 +601,29 @@ function ContentBuilder:build_body(p)
   local lines_shown = 0
   local max_lines = 15
   local max_width = 80
+  local prev_was_heading = false
+  local prev_was_blank = false
 
   for _, body_line in ipairs(cleaned_lines) do
+    local is_blank = body_line:match "^%s*$" ~= nil
+    local is_heading = (not in_code_block) and body_line:match "^#+%s+" ~= nil
+
+    -- Skip blank lines immediately after headings (outside code blocks)
+    if not in_code_block and is_blank and prev_was_heading then
+      prev_was_blank = true
+      goto continue
+    end
+
+    -- Auto-insert blank line before headings if not already preceded by one
+    if not in_code_block and is_heading and lines_shown > 0 and not prev_was_blank then
+      self:add_line "  "
+      lines_shown = lines_shown + 1
+      if lines_shown >= max_lines then
+        self:add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
+        break
+      end
+    end
+
     local lines_before = #self.lines
 
     if body_line:match "^```" then
@@ -590,10 +646,15 @@ function ContentBuilder:build_body(p)
     local lines_added = #self.lines - lines_before
     lines_shown = lines_shown + lines_added
 
+    prev_was_heading = is_heading
+    prev_was_blank = is_blank
+
     if lines_shown >= max_lines then
       self:add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
       break
     end
+
+    ::continue::
   end
 end
 

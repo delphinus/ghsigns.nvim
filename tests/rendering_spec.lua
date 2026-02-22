@@ -79,11 +79,11 @@ describe("PR content rendering", function()
         baseRefName = "main",
         headRefName = "feature",
       }
-      eq("main ← feature", c.lines[2])
+      eq("feature → main", c.lines[2])
       eq({
-        { col = 0, end_col = 4, hl = "String" },
-        { col = 5, end_col = 7, hl = "Operator" },
-        { col = 8, end_col = -1, hl = "Identifier" },
+        { col = 0, end_col = 7, hl = "Identifier" },
+        { col = 8, end_col = 10, hl = "Operator" },
+        { col = 11, end_col = -1, hl = "String" },
       }, hl_for_line(c, 1))
     end)
 
@@ -280,7 +280,7 @@ describe("PR content rendering", function()
       }
       eq({
         "#99 [DRAFT] Draft Feature",
-        "main ← feature",
+        "feature → main",
         "",
         "Author: Author",
         "State: OPEN",
@@ -715,7 +715,7 @@ All 21 tests pass:
     it("should produce the expected lines", function()
       eq({
         "#4 feat: add strikethrough support and cache management",
-        "main ← demo/markdown-rendering-test",
+        "demo/markdown-rendering-test → main",
         "",
         "Author: JINNOUCHI Yasushi",
         "State: MERGED",
@@ -727,20 +727,20 @@ All 21 tests pass:
         "",
         "Description:",
         "  Summary",
-        "  ",
         "  This PR adds two enhancements to ghsigns.nvim:",
         "  ",
         "  - Add strikethrough rendering support to the markdown module",
         "  - Introduce cache utility methods (clear, invalidate, size) for better cache",
-        "  lifecycle management",
+        "    lifecycle management",
         "  ",
         "  Motivation",
-        "  ",
         "  │ Currently, the markdown renderer handles bold, inline code, links, and",
         "  │ headings — but it does not support strikethrough. GitHub-flavored Markdown",
         "  │ uses text extensively in PR descriptions, so this is a useful addition.",
         "  │ ",
         "  │ Additionally, the Cache class only supported get and set. There was no way to:",
+        "  │ 1. Clear the entire cache",
+        "  │ 2. Invalidate a specific entry",
         "  ... (truncated)",
         "",
         "✕ Click here to close (or press q/Esc/Enter)",
@@ -756,9 +756,9 @@ All 21 tests pass:
 
     it("should have correct branch highlights", function()
       eq({
-        { col = 0, end_col = 4, hl = "String" },
-        { col = 5, end_col = 7, hl = "Operator" },
-        { col = 8, end_col = -1, hl = "Identifier" },
+        { col = 0, end_col = 28, hl = "Identifier" },
+        { col = 29, end_col = 31, hl = "Operator" },
+        { col = 32, end_col = -1, hl = "String" },
       }, hl_for_line(pr4_content, 1))
     end)
 
@@ -790,12 +790,12 @@ All 21 tests pass:
     it("should have correct body highlights", function()
       -- "Summary" heading
       eq({ { col = 2, end_col = 9, hl = "Title" } }, hl_for_line(pr4_content, 12))
-      -- Bold "ghsigns.nvim" in line 14
-      eq({ { col = 35, end_col = 47, hl = "Bold" } }, hl_for_line(pr4_content, 14))
+      -- Bold "ghsigns.nvim" in line 13
+      eq({ { col = 35, end_col = 47, hl = "Bold" } }, hl_for_line(pr4_content, 13))
       -- "Motivation" heading
-      eq({ { col = 2, end_col = 12, hl = "Title" } }, hl_for_line(pr4_content, 20))
-      -- Blockquote on line 22 (first wrapped blockquote line)
-      local bq_hl = hl_for_line(pr4_content, 22)
+      eq({ { col = 2, end_col = 12, hl = "Title" } }, hl_for_line(pr4_content, 19))
+      -- Blockquote on line 20 (first wrapped blockquote line)
+      local bq_hl = hl_for_line(pr4_content, 20)
       assert.is_not_nil(bq_hl)
       eq({ col = 2, end_col = 6, hl = "FloatBorder" }, bq_hl[1])
     end)
@@ -803,7 +803,7 @@ All 21 tests pass:
     it("should have link_metadata for the example.com link", function()
       eq(1, #pr4_content.link_metadata)
       eq("https://example.com", pr4_content.link_metadata[1].url)
-      eq(22, pr4_content.link_metadata[1].line)
+      eq(20, pr4_content.link_metadata[1].line)
     end)
 
     it("should have correct meta values", function()
@@ -865,6 +865,119 @@ All 21 tests pass:
       assert.is_not_nil(close_hl)
       eq({ col = 0, end_col = 1, hl = "ErrorMsg" }, close_hl[1])
       eq({ col = 2, end_col = 46, hl = "Comment" }, close_hl[2])
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 7: Mergeable visibility
+  ---------------------------------------------------------------------------
+  describe("Mergeable visibility", function()
+    it("should not show Mergeable for MERGED PRs", function()
+      local c = pr_display.build_pr_content {
+        number = 1,
+        title = "T",
+        state = "MERGED",
+        mergeable = "UNKNOWN",
+      }
+      for _, l in ipairs(c.lines) do
+        assert.is_nil(l:match "^Mergeable:")
+      end
+    end)
+
+    it("should not show Mergeable for CLOSED PRs", function()
+      local c = pr_display.build_pr_content {
+        number = 1,
+        title = "T",
+        state = "CLOSED",
+        mergeable = "CONFLICTING",
+      }
+      for _, l in ipairs(c.lines) do
+        assert.is_nil(l:match "^Mergeable:")
+      end
+    end)
+
+    it("should show Mergeable for OPEN PRs", function()
+      local c = pr_display.build_pr_content {
+        number = 1,
+        title = "T",
+        state = "OPEN",
+        mergeable = "MERGEABLE",
+      }
+      local found = false
+      for _, l in ipairs(c.lines) do
+        if l:match "^Mergeable:" then
+          found = true
+          break
+        end
+      end
+      assert.is_true(found)
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 8: List wrapping continuation indent
+  ---------------------------------------------------------------------------
+  describe("List wrapping continuation indent", function()
+    it("should indent continuation lines for dash list items", function()
+      local long_item = "- This is a very long list item that should be wrapped because it exceeds the maximum width of eighty characters in the display"
+      local c = build_with_body(long_item)
+      eq("  - This is a very long list item that should be wrapped because it exceeds the", c.lines[7])
+      eq("    maximum width of eighty characters in the display", c.lines[8])
+    end)
+
+    it("should indent continuation lines for numbered list items", function()
+      local long_item = "1. This is a very long numbered list item that should be wrapped because it exceeds the maximum width of eighty characters"
+      local c = build_with_body(long_item)
+      eq("  1. This is a very long numbered list item that should be wrapped because it", c.lines[7])
+      eq("     exceeds the maximum width of eighty characters", c.lines[8])
+    end)
+
+    it("should show Special highlight only on the first line of wrapped list", function()
+      local long_item = "- This is a very long list item that should be wrapped because it exceeds the maximum width of eighty characters in the display"
+      local c = build_with_body(long_item)
+      -- First line should have Special highlight for the marker
+      local line1_hl = hl_for_line(c, 6)
+      assert.is_not_nil(line1_hl)
+      local found_special = false
+      for _, g in ipairs(line1_hl) do
+        if g.hl == "Special" then
+          found_special = true
+          break
+        end
+      end
+      assert.is_true(found_special)
+      -- Second line should NOT have Special highlight
+      local line2_hl = hl_for_line(c, 7)
+      if line2_hl then
+        for _, g in ipairs(line2_hl) do
+          assert.is_not.equal("Special", g.hl)
+        end
+      end
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 9: Heading blank line control
+  ---------------------------------------------------------------------------
+  describe("Heading blank line control", function()
+    it("should skip blank lines after headings", function()
+      local c = build_with_body "## Title\n\nContent"
+      eq("  Title", c.lines[7])
+      eq("  Content", c.lines[8])
+    end)
+
+    it("should insert blank line before headings when not preceded by one", function()
+      local c = build_with_body "Paragraph\n## Title"
+      eq("  Paragraph", c.lines[7])
+      eq("  ", c.lines[8])
+      eq("  Title", c.lines[9])
+    end)
+
+    it("should not insert extra blank line before headings when already preceded by one", function()
+      local c = build_with_body "Paragraph\n\n## Title"
+      eq("  Paragraph", c.lines[7])
+      eq("  ", c.lines[8])
+      eq("  Title", c.lines[9])
     end)
   end)
 end)
