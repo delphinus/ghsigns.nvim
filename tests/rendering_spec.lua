@@ -1,20 +1,22 @@
 local eq = assert.are.same
 
 describe("PR content rendering", function()
-  local lualine
+  local pr_display
 
   before_each(function()
-    package.loaded["ghsigns.lualine"] = nil
-    lualine = require "ghsigns.lualine"
+    package.loaded["ghsigns.pr_display"] = nil
+    package.loaded["ghsigns.content_builder"] = nil
+    pr_display = require "ghsigns.pr_display"
   end)
 
   after_each(function()
-    package.loaded["ghsigns.lualine"] = nil
+    package.loaded["ghsigns.pr_display"] = nil
+    package.loaded["ghsigns.content_builder"] = nil
   end)
 
   -- Helper to build content with a body using minimal PR fields
   local function build_with_body(body, url)
-    return lualine.build_pr_content {
+    return pr_display.build_pr_content {
       number = 1,
       title = "T",
       body = body,
@@ -46,7 +48,7 @@ describe("PR content rendering", function()
   ---------------------------------------------------------------------------
   describe("Header section", function()
     it("should format title line with Number and GhsignsPrTitle highlights", function()
-      local c = lualine.build_pr_content { number = 42, title = "Test PR" }
+      local c = pr_display.build_pr_content { number = 42, title = "Test PR" }
       eq("#42 Test PR", c.lines[1])
       eq(0, c.title_line)
       eq("#42 Test PR", c.title_text)
@@ -57,7 +59,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show [DRAFT] indicator with WarningMsg highlight", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 99,
         title = "Draft Feature",
         isDraft = true,
@@ -71,7 +73,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show branch info with correct highlights", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         baseRefName = "main",
@@ -86,7 +88,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show Author with String highlight", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         author = { name = "Author" },
@@ -108,7 +110,7 @@ describe("PR content rendering", function()
     end)
 
     it("should fall back to login when author name is empty", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         author = { login = "user123", name = "" },
@@ -124,7 +126,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show State with DiagnosticOk for OPEN", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         state = "OPEN",
@@ -145,7 +147,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show State with DiagnosticError for MERGED", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         state = "MERGED",
@@ -165,7 +167,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show Changes with DiffAdd and DiffDelete highlights", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         additions = 10,
@@ -191,7 +193,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show date lines", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         createdAt = "2024-01-01T00:00:00Z",
@@ -216,7 +218,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show Labels with Tag highlight", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         labels = { nodes = { { name = "bug" }, { name = "enhancement" } } },
@@ -237,7 +239,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show Review Decision with correct highlights", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
         reviewDecision = "APPROVED",
@@ -258,7 +260,7 @@ describe("PR content rendering", function()
     end)
 
     it("should show full header with all fields", function()
-      local c = lualine.build_pr_content {
+      local c = pr_display.build_pr_content {
         number = 99,
         title = "Draft Feature",
         isDraft = true,
@@ -621,7 +623,7 @@ All 21 tests pass:
     -- stylua: ignore end
 
     before_each(function()
-      pr4_content = lualine.build_pr_content {
+      pr4_content = pr_display.build_pr_content {
         additions = 280,
         author = { login = "delphinus", name = "JINNOUCHI Yasushi" },
         baseRefName = "main",
@@ -748,7 +750,7 @@ All 21 tests pass:
   ---------------------------------------------------------------------------
   describe("Edge cases", function()
     it("should handle nil body", function()
-      local c = lualine.build_pr_content { number = 1, title = "T" }
+      local c = pr_display.build_pr_content { number = 1, title = "T" }
       eq({
         "#1 T",
         "",
@@ -783,14 +785,14 @@ All 21 tests pass:
     end)
 
     it("should have close button as last line", function()
-      local c = lualine.build_pr_content { number = 1, title = "T" }
+      local c = pr_display.build_pr_content { number = 1, title = "T" }
       local last_line = c.lines[#c.lines]
       eq("✕ Click here to close (or press q/Esc/Enter)", last_line)
       eq(#c.lines - 1, c.close_line_idx)
     end)
 
     it("should have ErrorMsg and Comment highlights on close button", function()
-      local c = lualine.build_pr_content { number = 1, title = "T" }
+      local c = pr_display.build_pr_content { number = 1, title = "T" }
       local close_hl = hl_for_line(c, c.close_line_idx)
       assert.is_not_nil(close_hl)
       eq({ col = 0, end_col = 1, hl = "ErrorMsg" }, close_hl[1])

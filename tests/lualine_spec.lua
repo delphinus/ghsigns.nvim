@@ -103,6 +103,27 @@ describe("Lualine module", function()
   end)
 
   describe("show_pr_info", function()
+    it("should be re-exported from pr_display", function()
+      assert.is_function(lualine.show_pr_info)
+    end)
+  end)
+end)
+
+describe("PrDisplay module", function()
+  local pr_display
+
+  before_each(function()
+    package.loaded["ghsigns.pr_display"] = nil
+    package.loaded["ghsigns.content_builder"] = nil
+    pr_display = require "ghsigns.pr_display"
+  end)
+
+  after_each(function()
+    package.loaded["ghsigns.pr_display"] = nil
+    package.loaded["ghsigns.content_builder"] = nil
+  end)
+
+  describe("show_pr_info", function()
     local original_getmousepos
 
     before_each(function()
@@ -127,7 +148,7 @@ describe("Lualine module", function()
     end)
 
     it("should be a function", function()
-      assert.is_function(lualine.show_pr_info)
+      assert.is_function(pr_display.show_pr_info)
     end)
 
     it("should close existing window if already open", function()
@@ -143,7 +164,7 @@ describe("Lualine module", function()
       }
 
       -- First call creates the window
-      lualine.show_pr_info(pr)
+      pr_display.show_pr_info(pr)
 
       -- Count floating windows
       local floating_wins_before = 0
@@ -157,7 +178,7 @@ describe("Lualine module", function()
       assert.is_true(floating_wins_before > 0, "Should have created a floating window")
 
       -- Second call should close the window
-      lualine.show_pr_info(pr)
+      pr_display.show_pr_info(pr)
 
       local floating_wins_after = 0
       for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -185,7 +206,7 @@ describe("Lualine module", function()
         changedFiles = 3,
       }
 
-      lualine.show_pr_info(pr)
+      pr_display.show_pr_info(pr)
 
       -- Find the floating window buffer
       local found_content = false
@@ -224,7 +245,7 @@ describe("Lualine module", function()
         author = { login = "testuser" },
       }
 
-      lualine.show_pr_info(pr)
+      pr_display.show_pr_info(pr)
 
       -- Find the buffer with DRAFT indicator
       local found_draft = false
