@@ -4,6 +4,8 @@
 
 A Neovim plugin that integrates [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) with GitHub CLI to automatically display Pull Request information in your statusline and show diffs against the PR's base branch.
 
+<video src="https://raw.githubusercontent.com/delphinus/ghsigns.nvim/main/assets/demo.mp4" controls muted></video>
+
 ## Features
 
 - Automatically fetches PR information for the current branch using GitHub CLI
@@ -26,7 +28,7 @@ A Neovim plugin that integrates [gitsigns.nvim](https://github.com/lewis6991/git
 
 ![Lualine showing PR information](assets/lualine-screenshot.png)
 
-The Lualine component displays the current branch (`dev/pack-newline`), base branch (`master`), and PR number (`#37782`) with colorful syntax highlighting.
+The Lualine component displays the current branch (`calebdw/push-mzxxqywkwszq`), base branch (`master`), and PR number (`#38006`) with colorful syntax highlighting.
 
 ## Requirements
 
@@ -197,6 +199,8 @@ MIT
 
 [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) と GitHub CLI を統合し、ステータスラインに Pull Request 情報を自動表示し、PR のベースブランチとの差分を表示する Neovim プラグインです。
 
+<video src="https://raw.githubusercontent.com/delphinus/ghsigns.nvim/main/assets/demo.mp4" controls muted></video>
+
 ## 機能
 
 - GitHub CLI を使用して現在のブランチの PR 情報を自動取得
@@ -219,7 +223,7 @@ MIT
 
 ![Lualine に PR 情報を表示](assets/lualine-screenshot.png)
 
-Lualine コンポーネントは、現在のブランチ（`dev/pack-newline`）、ベースブランチ（`master`）、PR 番号（`#37782`）をカラフルに表示します。
+Lualine コンポーネントは、現在のブランチ（`calebdw/push-mzxxqywkwszq`）、ベースブランチ（`master`）、PR 番号（`#38006`）をカラフルに表示します。
 
 ## 必要要件
 
