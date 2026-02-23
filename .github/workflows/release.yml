@@ -19,6 +19,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify CHANGELOG.md is up to date
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! grep -q "^## \[${version}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md does not contain an entry for version ${version}."
+            echo "Run 'git-cliff --output CHANGELOG.md' and commit the result before tagging."
+            exit 1
+          fi
+
       - name: Generate release notes
         id: release_notes
         uses: orhun/git-cliff-action@v4
@@ -28,25 +37,8 @@ jobs:
         env:
           OUTPUT: release_notes.md
 
-      - name: Generate full changelog
-        uses: orhun/git-cliff-action@v4
-        with:
-          config: cliff.toml
-          args: --output CHANGELOG.md
-        env:
-          OUTPUT: CHANGELOG.md
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: release_notes.md
           generate_release_notes: false
-
-      - name: Commit and push CHANGELOG.md
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}" || true
-          git push origin HEAD:main
