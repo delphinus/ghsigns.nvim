@@ -165,6 +165,28 @@ make test-lualine
   - Floating window creation and management
   - PR information display
 
+### Releasing
+
+1. Update CHANGELOG.md with git-cliff and commit:
+
+```bash
+git-cliff --output CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "docs: update CHANGELOG.md for vX.Y.Z"
+```
+
+2. Merge the changes into `main` via a pull request.
+
+3. Create and push a version tag:
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The release workflow will verify that CHANGELOG.md contains the version entry,
+generate release notes with git-cliff, and create a GitHub Release automatically.
+
 ## License
 
 MIT
@@ -335,6 +357,28 @@ make test-lualine
   - クリックハンドラー（シングル/ダブルクリック）
   - フローティングウィンドウの作成と管理
   - PR 情報の表示
+
+### リリース
+
+1. git-cliff で CHANGELOG.md を更新してコミット:
+
+```bash
+git-cliff --output CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "docs: update CHANGELOG.md for vX.Y.Z"
+```
+
+2. Pull Request 経由で `main` にマージ。
+
+3. バージョンタグを作成して push:
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+リリースワークフローが CHANGELOG.md にバージョンエントリがあることを検証し、
+git-cliff でリリースノートを生成して GitHub Release を自動作成します。
 
 ## ライセンス
 
