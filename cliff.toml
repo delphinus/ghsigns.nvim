@@ -1,0 +1,66 @@
+[changelog]
+header = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/),
+and this project adheres to [Semantic Versioning](https://semver.org/).\n
+"""
+body = """
+{%- macro remote_url() -%}
+  https://github.com/delphinus/ghsigns.nvim
+{%- endmacro -%}
+
+{% if version -%}
+  ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+  ## [Unreleased]
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+  ### {{ group | striptags | trim | upper_first }}
+  {% for commit in commits %}
+    - {{ commit.message | split(pat="\n") | first | trim }}
+  {%- endfor %}
+{% endfor %}\n
+"""
+footer = """
+{%- macro remote_url() -%}
+  https://github.com/delphinus/ghsigns.nvim
+{%- endmacro -%}
+
+{% for release in releases -%}
+  {% if release.version -%}
+    {% if release.previous.version -%}
+      [{{ release.version | trim_start_matches(pat="v") }}]: {{ self::remote_url() }}/compare/{{ release.previous.version }}...{{ release.version }}
+    {% else -%}
+      [{{ release.version | trim_start_matches(pat="v") }}]: {{ self::remote_url() }}/releases/tag/{{ release.version }}
+    {% endif -%}
+  {% else -%}
+    {% if release.previous.version -%}
+      [Unreleased]: {{ self::remote_url() }}/compare/{{ release.previous.version }}...HEAD
+    {% endif -%}
+  {% endif -%}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_parsers = [
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^style", group = "Changed" },
+  { message = "^test", group = "Changed" },
+  { message = "^chore", group = "Changed" },
+  { message = "^ci", group = "Changed" },
+  { message = "^Merge", skip = true },
+]
+filter_commits = false
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"

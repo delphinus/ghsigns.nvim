@@ -5,50 +5,100 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.0.1] - 2026-02-22
+## [1.3.0] - 2026-02-22
+
+### Documentation
+
+- add Neovim help file (vimdoc)
+
+## [1.2.0] - 2026-02-22
+
+### Added
+
+- add show_demo() for markdown rendering verification
+
+## [1.1.0] - 2026-02-22
+
+### Added
+
+- add treesitter syntax highlighting for code blocks in floating window
 
 ### Fixed
 
-- Fix CJK (Japanese, Chinese, Korean) text causing floating window to expand
-  horizontally instead of wrapping properly. Added segment-based text splitting
-  that treats each CJK/fullwidth character as an individual wrapping unit.
+- improve floating window display (branch order, mergeable, list indent, heading spacing)
+
+## [1.0.1] - 2026-02-22
+
+### Changed
+
+- prepare for v1.0.1 release
+
+### Fixed
+
+- handle CJK line wrapping in floating window
 
 ## [1.0.0] - 2026-02-22
 
 ### Added
 
-- Core plugin that integrates gitsigns.nvim with GitHub CLI
-- Automatic PR information fetching for the current branch via `gh pr view`
-- Automatic diff base change to the PR's base branch using gitsigns' `change_base`
-- PR information caching by repository root and branch name
-- Asynchronous PR fetching to avoid blocking the editor
-- Lualine statusline component displaying branch name, base branch, and PR number
-- Interactive mouse click handling on the Lualine component:
-  - Single-click: Show detailed PR information in a floating window
-  - Double-click: Open the PR in the browser
-- Rich floating window for PR information display:
-  - PR title, draft status, author, state, review decision, mergeable status
-  - Branch information, labels, dates (created, updated, merged)
-  - Line changes (+/-), file count, and commit count
-  - Markdown-rendered PR description with syntax highlighting
-  - Clickable links (`[text](url)` format and `#123` issue/PR references)
-  - Close button, keyboard shortcuts (q/Esc/Enter), and click-outside-to-close
-- Markdown rendering engine supporting:
-  - Headings (h1-h3)
-  - Bold, strikethrough, inline code
-  - Links and issue/PR references
-  - Ordered and unordered lists
-  - Code blocks with language labels
-  - Blockquotes (including nested)
-  - HTML comment/tag stripping
-  - Long line wrapping with highlight preservation
-- OSC 8 terminal detection to prevent duplicate link opening behavior
-  - Supports iTerm2, WezTerm, kitty, foot, contour, rio, alacritty, ghostty
-  - Supports VTE-based terminals (GNOME Terminal, etc.) and Windows Terminal
-- Customizable colors for the Lualine component (icon, head, arrow, base)
-- Comprehensive test suite (89 tests) covering markdown rendering, PR content
-  rendering, lualine component, and OSC 8 detection
-- CI pipeline with GitHub Actions
+- add .gitignore and StyLua settings
+- implement the base features
+- enable to open PR on clicking statusline
+- show PR number in Lualine section
+- print non-critical messages as debug ones
+- add single/double click handling for PR component
+- implement floating window for PR information display
+- add strikethrough support and cache management methods
+- add blockquote rendering support
 
-[1.0.1]: https://github.com/delphinus/ghsigns.nvim/releases/tag/v1.0.1
+### Changed
+
+- add types
+- add debug logging
+- fix arrangement
+- add Git class skeleton
+- add .claude directory to .gitignore
+- add comprehensive test suite with plenary.nvim
+- add GitHub Actions workflow for running tests
+- use more understandable variable names
+- fix styles
+- gather logic to open/close float win
+- fix test for changing messages
+- fix by StyLua
+- unify click handling via url extmarks
+- add PR content rendering tests with build_pr_content extraction
+- use [[ ]] long string for PR #4 body in test
+- extract process_paired_markers and process_code_markers in markdown.lua
+- split show_pr_info into apply_content_to_buffer, open_float_window, setup_float_keymaps
+- introduce ContentBuilder and decompose build_pr_content
+- decompose add_markdown_line into pure functions and focused methods
+- replace generic table annotations with specific type definitions
+- decompose Markdown.render, build_header, and build_body
+- extract FloatWin class to float_win.lua
+- extract ContentBuilder and helpers to content_builder.lua
+- extract PR display logic to pr_display.lua
+- prepare for v1.0.0 release
+
+### Documentation
+
+- add README
+- update README with floating window features
+- translate Development/Testing section to Japanese
+
+### Fixed
+
+- detect `origin` remote in default
+- detect error messages validly
+- use semaphore to access API duplicatedly
+- wrap vim.notify with vim.schedule_wrap for async safety
+- maintain blockquote prefix on wrapped continuation lines
+- correct highlight positions when multiple inline elements coexist
+- embed PR #4 body inline instead of reading from /tmp
+- prevent duplicate link opening in OSC 8 terminals
+
+[1.3.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/delphinus/ghsigns.nvim/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/delphinus/ghsigns.nvim/releases/tag/v1.0.0
+
