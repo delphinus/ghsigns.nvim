@@ -206,6 +206,9 @@ end
 ---@return string? special_type Special type like "heading" if applicable
 Markdown.render = function(text, repo_base_url)
   local rendered_text = text:gsub("\r", "")
+  -- Collapse multiple consecutive spaces (preserve leading whitespace)
+  local leading_ws = rendered_text:match "^(%s*)" or ""
+  rendered_text = leading_ws .. rendered_text:sub(#leading_ws + 1):gsub("  +", " ")
   local highlights = {}
   local links = {}
 

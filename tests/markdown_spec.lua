@@ -93,6 +93,21 @@ describe("Markdown rendering", function()
       local text = markdown.render("Run `npm install` then `npm start`")
       eq("Run npm install then npm start", text)
     end)
+
+    it("should correctly highlight inline code after multiple consecutive spaces", function()
+      local text, highlights = markdown.render("one of  `edit`, `tabedit`")
+      -- Multiple spaces should be collapsed to one
+      eq("one of edit, tabedit", text)
+      local code_hls = {}
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "String" then
+          table.insert(code_hls, hl)
+        end
+      end
+      eq(2, #code_hls)
+      eq("edit", text:sub(code_hls[1].col + 1, code_hls[1].end_col))
+      eq("tabedit", text:sub(code_hls[2].col + 1, code_hls[2].end_col))
+    end)
   end)
 
   describe("Issue references", function()
