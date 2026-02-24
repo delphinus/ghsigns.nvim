@@ -4,7 +4,7 @@
 
 A Neovim plugin that integrates [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) with GitHub CLI to automatically display Pull Request information in your statusline and show diffs against the PR's base branch.
 
-<video src="https://raw.githubusercontent.com/delphinus/ghsigns.nvim/main/assets/demo.mp4" controls muted></video>
+![Demo](assets/demo.gif)
 
 ## Features
 
@@ -199,7 +199,7 @@ MIT
 
 [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) と GitHub CLI を統合し、ステータスラインに Pull Request 情報を自動表示し、PR のベースブランチとの差分を表示する Neovim プラグインです。
 
-<video src="https://raw.githubusercontent.com/delphinus/ghsigns.nvim/main/assets/demo.mp4" controls muted></video>
+![Demo](assets/demo.gif)
 
 ## 機能
 
