@@ -96,7 +96,7 @@ local function apply_treesitter_highlights(buf, ns, content)
         end_row = block.start_line + er,
         end_col = ec + 2,
         hl_group = "@" .. name .. "." .. block.language,
-        priority = 110,
+        priority = 4200,
       })
     end
 
