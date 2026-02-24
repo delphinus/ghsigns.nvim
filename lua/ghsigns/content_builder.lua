@@ -508,18 +508,19 @@ end
 ---@param self Ghsigns.ContentBuilder
 ---@param table_lines string[]
 ---@param indent string
+---@param max_width integer
 ---@param repo_base_url? string
-function ContentBuilder:add_table(table_lines, indent, repo_base_url)
+function ContentBuilder:add_table(table_lines, indent, max_width, repo_base_url)
   local markdown_table = require "ghsigns.markdown_table"
   local parsed = markdown_table.parse(table_lines, repo_base_url)
   if not parsed then
     -- Fallback: render each line as markdown
     for _, line in ipairs(table_lines) do
-      self:add_markdown_line(line, indent, 80, repo_base_url)
+      self:add_markdown_line(line, indent, max_width, repo_base_url)
     end
     return
   end
-  local lines, per_line_hls, per_line_links = markdown_table.render(parsed, indent)
+  local lines, per_line_hls, per_line_links = markdown_table.render(parsed, indent, max_width)
   local base_line = #self.lines
   for i, line in ipairs(lines) do
     self:add_line(line, #per_line_hls[i] > 0 and per_line_hls[i] or nil)
@@ -652,7 +653,7 @@ function ContentBuilder:build_body(p, opts)
   local function flush_table()
     if #table_buf > 0 then
       local lines_before = #self.lines
-      self:add_table(table_buf, "  ", repo_base_url)
+      self:add_table(table_buf, "  ", max_width, repo_base_url)
       local lines_added = #self.lines - lines_before
       lines_shown = lines_shown + lines_added
       table_buf = {}
