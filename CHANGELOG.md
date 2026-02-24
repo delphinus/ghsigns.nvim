@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-02-24
+
+### Added
+
+- Markdown table rendering in floating window using box-drawing characters (`│`, `─`)
+- Support for column alignment (left/center/right) and inline markdown in table cells
+- New `markdown_table` module with `parse()` and `render()` functions
+
 ## [1.3.6] - 2026-02-24
 
 ### Fixed
