@@ -5,11 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.5] - 2026-02-24
+
+### Documentation
+
+- replace demo video with GIF for inline display
+
 ## [1.3.4] - 2026-02-23
 
 ### Documentation
 
 - add demo screencast and update lualine screenshot
+- update CHANGELOG.md for v1.3.4
 
 ## [1.3.3] - 2026-02-23
 
@@ -129,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - embed PR #4 body inline instead of reading from /tmp
 - prevent duplicate link opening in OSC 8 terminals
 
+[1.3.5]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.1...v1.3.2
