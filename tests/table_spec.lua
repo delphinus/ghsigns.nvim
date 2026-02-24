@@ -365,5 +365,93 @@ describe("MarkdownTable", function()
       eq("  │───│───│───│", result_lines[2])
       eq("  │ 1 │ 2 │ 3 │", result_lines[3])
     end)
+
+    it("should shrink columns when table exceeds max_width", function()
+      -- A wide table that exceeds 40 chars
+      local lines = {
+        "| Very Long Header One | Very Long Header Two |",
+        "|----------------------|----------------------|",
+        "| Some cell content | Another cell content |",
+      }
+      local parsed = markdown_table.parse(lines)
+      assert.is_not_nil(parsed)
+      -- Without max_width: natural width is large
+      local natural_lines, _, _ = markdown_table.render(parsed, "  ")
+      local natural_width = vim.fn.strdisplaywidth(natural_lines[1])
+      assert.is_true(natural_width > 40)
+
+      -- With max_width=40: should fit
+      local shrunk_lines, _, _ = markdown_table.render(parsed, "  ", 40)
+      local shrunk_width = vim.fn.strdisplaywidth(shrunk_lines[1])
+      assert.is_true(shrunk_width <= 40)
+    end)
+
+    it("should truncate cell content with ellipsis when column is shrunk", function()
+      local lines = {
+        "| LongHeaderName |",
+        "|----------------|",
+        "| LongCellValue |",
+      }
+      local parsed = markdown_table.parse(lines)
+      assert.is_not_nil(parsed)
+      -- Shrink to very narrow: max_width = 15 -> budget = 15 - 2(indent) - 3(overhead) - 1(trailing) = 9
+      local result_lines, _, _ = markdown_table.render(parsed, "  ", 15)
+      -- Cell content should be truncated with "…"
+      assert.is_truthy(result_lines[1]:match "…")
+      assert.is_truthy(result_lines[3]:match "…")
+      -- Should still have proper structure
+      assert.is_truthy(result_lines[1]:match "^  │")
+    end)
+
+    it("should not shrink columns when table fits within max_width", function()
+      local lines = {
+        "| A | B |",
+        "|---|---|",
+        "| 1 | 2 |",
+      }
+      local parsed = markdown_table.parse(lines)
+      assert.is_not_nil(parsed)
+      local result_lines, _, _ = markdown_table.render(parsed, "  ", 80)
+      eq("  │ A │ B │", result_lines[1])
+    end)
+
+    it("should clip highlights when cell content is truncated", function()
+      local lines = {
+        "| Header |",
+        "|--------|",
+        "| **very long bold text here** |",
+      }
+      local parsed = markdown_table.parse(lines)
+      assert.is_not_nil(parsed)
+      -- Shrink to narrow width
+      local _, hls, _ = markdown_table.render(parsed, "  ", 18)
+      -- Data row highlights should exist and be clipped
+      local data_hls = hls[3]
+      assert.is_not_nil(data_hls)
+      -- Should have Bold highlight but clipped to column width
+      local found_bold = false
+      for _, h in ipairs(data_hls) do
+        if h.hl == "Bold" then
+          found_bold = true
+          break
+        end
+      end
+      assert.is_true(found_bold)
+    end)
+
+    it("should clip link metadata when cell content is truncated", function()
+      local lines = {
+        "| Header |",
+        "|--------|",
+        "| [very long link text](https://example.com) |",
+      }
+      local parsed = markdown_table.parse(lines)
+      assert.is_not_nil(parsed)
+      -- Shrink to narrow width
+      local _, _, lnks = markdown_table.render(parsed, "  ", 18)
+      -- Data row should still have link (clipped)
+      assert.is_true(#lnks[3] >= 1)
+      eq("https://example.com", lnks[3][1].url)
+    end)
   end)
 end)

@@ -79,6 +79,35 @@ local function process_cell(text, repo_base_url)
   }
 end
 
+--- Truncate text to fit within a display width, appending "…" if truncated.
+--- Handles multi-byte (CJK) characters correctly.
+---@param text string
+---@param max_display_width integer
+---@return string truncated text
+---@return integer byte_length of the kept portion (before "…")
+local function truncate_to_width(text, max_display_width)
+  local text_width = vim.fn.strdisplaywidth(text)
+  if text_width <= max_display_width then
+    return text, #text
+  end
+  -- Need at least 1 col for "…"
+  local target = max_display_width - 1
+  if target <= 0 then
+    return "…", 0
+  end
+  local current_width = 0
+  local byte_pos = 0
+  for char in text:gmatch "[%z\1-\127\194-\253][\128-\191]*" do
+    local char_width = vim.fn.strdisplaywidth(char)
+    if current_width + char_width > target then
+      break
+    end
+    current_width = current_width + char_width
+    byte_pos = byte_pos + #char
+  end
+  return text:sub(1, byte_pos) .. "…", byte_pos
+end
+
 --- Pad text to a given display width according to alignment
 ---@param text string
 ---@param width integer target display width
@@ -172,14 +201,62 @@ end
 --- Render a parsed table into lines with highlights and links
 ---@param parsed_table Ghsigns.MarkdownTable.ParsedTable
 ---@param indent string
+---@param max_width? integer Maximum display width (default: no limit)
 ---@return string[] lines
 ---@return Ghsigns.Highlight.Group[][] per_line_highlights
 ---@return {line: integer, col_start: integer, col_end: integer, url: string}[][] per_line_links
-function MarkdownTable.render(parsed_table, indent)
+function MarkdownTable.render(parsed_table, indent, max_width)
   local out_lines = {}
   local out_highlights = {}
   local out_links = {}
   local num_cols = #parsed_table.col_widths
+  local col_widths = vim.deepcopy(parsed_table.col_widths)
+
+  -- Shrink column widths if table exceeds max_width
+  if max_width then
+    local indent_width = vim.fn.strdisplaywidth(indent)
+    -- Total = indent + num_cols * ("│ " + col_width + " ") + "│"
+    --       = indent + num_cols * 3 + sum(col_widths) + 1
+    local overhead = indent_width + num_cols * 3 + 1
+    local content_sum = 0
+    for _, w in ipairs(col_widths) do
+      content_sum = content_sum + w
+    end
+    local total = overhead + content_sum
+    if total > max_width then
+      local budget = max_width - overhead
+      if budget < num_cols then
+        -- Cannot fit even 1 char per column; use minimum of 1
+        budget = num_cols
+      end
+      -- Distribute budget proportionally, ensuring each column gets at least 1
+      local new_widths = {}
+      local assigned = 0
+      for col = 1, num_cols do
+        local proportion = col_widths[col] / content_sum
+        local w = math.max(1, math.floor(proportion * budget))
+        new_widths[col] = w
+        assigned = assigned + w
+      end
+      -- Distribute remaining budget to the widest columns
+      local remaining = budget - assigned
+      while remaining > 0 do
+        local best_col = 1
+        local best_deficit = 0
+        for col = 1, num_cols do
+          local deficit = col_widths[col] - new_widths[col]
+          if deficit > best_deficit then
+            best_deficit = deficit
+            best_col = col
+          end
+        end
+        if best_deficit <= 0 then break end
+        new_widths[best_col] = new_widths[best_col] + 1
+        remaining = remaining - 1
+      end
+      col_widths = new_widths
+    end
+  end
 
   --- Build a data row line (header or body)
   ---@param cells Ghsigns.MarkdownTable.ParsedCell[]
@@ -195,7 +272,41 @@ function MarkdownTable.render(parsed_table, indent)
 
     for col = 1, num_cols do
       local cell = cells[col]
-      local padded, left_pad = pad_cell(cell.text, parsed_table.col_widths[col], parsed_table.alignments[col])
+      local display_text = cell.text
+      local cell_hls = cell.highlights
+      local cell_links = cell.links
+      local truncated_byte_len = #display_text
+
+      -- Truncate cell text if it exceeds the (possibly shrunk) column width
+      if vim.fn.strdisplaywidth(display_text) > col_widths[col] then
+        display_text, truncated_byte_len = truncate_to_width(display_text, col_widths[col])
+        -- Clip highlights to the kept portion
+        local clipped_hls = {}
+        for _, hl in ipairs(cell_hls) do
+          if hl.col < truncated_byte_len then
+            table.insert(clipped_hls, {
+              col = hl.col,
+              end_col = math.min(hl.end_col, truncated_byte_len),
+              hl = hl.hl,
+            })
+          end
+        end
+        cell_hls = clipped_hls
+        -- Clip links to the kept portion
+        local clipped_links = {}
+        for _, link in ipairs(cell_links) do
+          if link.col_start < truncated_byte_len then
+            table.insert(clipped_links, {
+              col_start = link.col_start,
+              col_end = math.min(link.col_end, truncated_byte_len),
+              url = link.url,
+            })
+          end
+        end
+        cell_links = clipped_links
+      end
+
+      local padded, left_pad = pad_cell(display_text, col_widths[col], parsed_table.alignments[col])
 
       -- "│ " before cell
       local sep = "│ "
@@ -205,7 +316,7 @@ function MarkdownTable.render(parsed_table, indent)
       local cell_start = byte_pos + left_pad
 
       -- Add cell highlights (shifted by byte_pos + left_pad)
-      for _, hl in ipairs(cell.highlights) do
+      for _, hl in ipairs(cell_hls) do
         table.insert(hls, {
           col = cell_start + hl.col,
           end_col = cell_start + hl.end_col,
@@ -217,13 +328,13 @@ function MarkdownTable.render(parsed_table, indent)
       if is_header then
         table.insert(hls, {
           col = cell_start,
-          end_col = cell_start + #cell.text,
+          end_col = cell_start + #display_text,
           hl = "Bold",
         })
       end
 
       -- Add cell links (shifted)
-      for _, link in ipairs(cell.links) do
+      for _, link in ipairs(cell_links) do
         table.insert(lnks, {
           col_start = cell_start + link.col_start,
           col_end = cell_start + link.col_end,
@@ -255,7 +366,7 @@ function MarkdownTable.render(parsed_table, indent)
     local byte_pos = #indent
 
     for col = 1, num_cols do
-      local sep_str = "│" .. string.rep("─", parsed_table.col_widths[col] + 2)
+      local sep_str = "│" .. string.rep("─", col_widths[col] + 2)
       table.insert(parts, sep_str)
       byte_pos = byte_pos + #sep_str
     end

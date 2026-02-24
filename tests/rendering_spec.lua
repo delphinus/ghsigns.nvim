@@ -712,6 +712,25 @@ describe("PR content rendering", function()
       end
       assert.is_true(found_link)
     end)
+
+    it("should shrink wide tables to fit within 80 characters", function()
+      -- Build a table wider than 80 chars
+      local body = table.concat({
+        "| Very Long Column Header One | Very Long Column Header Two | Very Long Column Header Three |",
+        "|-----------------------------|-----------------------------|-----------------------------|",
+        "| Some long cell content here | Another long cell content | Yet another long cell value |",
+      }, "\n")
+      local c = build_with_body(body)
+      -- All table lines should fit within 80 display chars
+      for i = 7, 9 do
+        local w = vim.fn.strdisplaywidth(c.lines[i])
+        assert.is_true(w <= 80, "Line " .. i .. " width " .. w .. " exceeds 80: " .. c.lines[i])
+      end
+      -- Should still have proper table structure
+      assert.is_truthy(c.lines[7]:match "^  │")
+      assert.is_truthy(c.lines[8]:match "^  │")
+      assert.is_truthy(c.lines[9]:match "^  │")
+    end)
   end)
 
   ---------------------------------------------------------------------------
