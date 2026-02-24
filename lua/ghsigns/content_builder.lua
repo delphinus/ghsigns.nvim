@@ -504,6 +504,36 @@ function ContentBuilder:add_simple_markdown(rendered_text, md_highlights, md_lin
   end
 end
 
+--- Add a table block with highlights and links
+---@param self Ghsigns.ContentBuilder
+---@param table_lines string[]
+---@param indent string
+---@param repo_base_url? string
+function ContentBuilder:add_table(table_lines, indent, repo_base_url)
+  local markdown_table = require "ghsigns.markdown_table"
+  local parsed = markdown_table.parse(table_lines, repo_base_url)
+  if not parsed then
+    -- Fallback: render each line as markdown
+    for _, line in ipairs(table_lines) do
+      self:add_markdown_line(line, indent, 80, repo_base_url)
+    end
+    return
+  end
+  local lines, per_line_hls, per_line_links = markdown_table.render(parsed, indent)
+  local base_line = #self.lines
+  for i, line in ipairs(lines) do
+    self:add_line(line, #per_line_hls[i] > 0 and per_line_hls[i] or nil)
+    for _, link in ipairs(per_line_links[i] or {}) do
+      table.insert(self.link_metadata, {
+        line = base_line + i - 1,
+        col_start = link.col_start,
+        col_end = link.col_end,
+        url = link.url,
+      })
+    end
+  end
+end
+
 --- Add a markdown-rendered line with wrapping support
 ---@param self Ghsigns.ContentBuilder
 ---@param text string
@@ -615,10 +645,40 @@ function ContentBuilder:build_body(p, opts)
   local max_width = 80
   local prev_was_heading = false
   local prev_was_blank = false
+  local table_buf = {}
+  local truncated = false
+
+  --- Flush accumulated table lines
+  local function flush_table()
+    if #table_buf > 0 then
+      local lines_before = #self.lines
+      self:add_table(table_buf, "  ", repo_base_url)
+      local lines_added = #self.lines - lines_before
+      lines_shown = lines_shown + lines_added
+      table_buf = {}
+    end
+  end
 
   for _, body_line in ipairs(cleaned_lines) do
     local is_blank = body_line:match "^%s*$" ~= nil
     local is_heading = (not in_code_block) and body_line:match "^#+%s+" ~= nil
+    local is_table_line = (not in_code_block) and body_line:match "^%s*|" ~= nil
+
+    -- Accumulate table lines
+    if is_table_line then
+      table.insert(table_buf, body_line)
+      goto continue
+    end
+
+    -- Flush table buffer when a non-table line is encountered
+    if #table_buf > 0 then
+      flush_table()
+      if lines_shown >= max_lines then
+        self:add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
+        truncated = true
+        break
+      end
+    end
 
     -- Skip blank lines immediately after headings (outside code blocks)
     if not in_code_block and is_blank and prev_was_heading then
@@ -632,6 +692,7 @@ function ContentBuilder:build_body(p, opts)
       lines_shown = lines_shown + 1
       if lines_shown >= max_lines then
         self:add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
+        truncated = true
         break
       end
     end
@@ -677,10 +738,19 @@ function ContentBuilder:build_body(p, opts)
 
     if lines_shown >= max_lines then
       self:add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
+      truncated = true
       break
     end
 
     ::continue::
+  end
+
+  -- Flush any remaining table lines at end of body
+  if not truncated then
+    flush_table()
+    if lines_shown >= max_lines then
+      self:add_line("  ... (truncated)", { { col = 0, end_col = -1, hl = "Comment" } })
+    end
   end
 end
 

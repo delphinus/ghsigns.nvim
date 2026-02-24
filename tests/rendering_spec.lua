@@ -580,6 +580,141 @@ describe("PR content rendering", function()
   end)
 
   ---------------------------------------------------------------------------
+  -- Group 3c: Table rendering
+  ---------------------------------------------------------------------------
+  describe("Table rendering", function()
+    it("should render a basic table with box-drawing characters", function()
+      local body = "| A | B |\n|---|---|\n| 1 | 2 |"
+      local c = build_with_body(body)
+      eq("  │ A │ B │", c.lines[7])
+      eq("  │───│───│", c.lines[8])
+      eq("  │ 1 │ 2 │", c.lines[9])
+    end)
+
+    it("should apply FloatBorder highlight to border characters", function()
+      local body = "| A |\n|---|\n| 1 |"
+      local c = build_with_body(body)
+      -- Separator line
+      local sep_hls = hl_for_line(c, 7)
+      assert.is_not_nil(sep_hls)
+      local found_border = false
+      for _, g in ipairs(sep_hls) do
+        if g.hl == "FloatBorder" then
+          found_border = true
+          break
+        end
+      end
+      assert.is_true(found_border)
+    end)
+
+    it("should apply Bold highlight to header cells", function()
+      local body = "| Header |\n|--------|\n| data |"
+      local c = build_with_body(body)
+      local header_hls = hl_for_line(c, 6)
+      assert.is_not_nil(header_hls)
+      local found_bold = false
+      for _, g in ipairs(header_hls) do
+        if g.hl == "Bold" then
+          found_bold = true
+          break
+        end
+      end
+      assert.is_true(found_bold)
+    end)
+
+    it("should render inline markdown in table cells", function()
+      local body = "| Feature |\n|---------|\n| `code` |"
+      local c = build_with_body(body)
+      -- Data row should contain "code" and have String highlight
+      assert.is_truthy(c.lines[9]:match "code")
+      local data_hls = hl_for_line(c, 8)
+      assert.is_not_nil(data_hls)
+      local found_string = false
+      for _, g in ipairs(data_hls) do
+        if g.hl == "String" then
+          found_string = true
+          break
+        end
+      end
+      assert.is_true(found_string)
+    end)
+
+    it("should count table lines for truncation", function()
+      local lines = {}
+      for i = 1, 10 do
+        table.insert(lines, "Line " .. i)
+      end
+      -- Add a table that would push past 15 lines
+      table.insert(lines, "| A | B |")
+      table.insert(lines, "|---|---|")
+      for i = 1, 10 do
+        table.insert(lines, "| " .. i .. " | x |")
+      end
+      local c = build_with_body(table.concat(lines, "\n"))
+      -- Should contain truncation message
+      local found_truncated = false
+      for _, l in ipairs(c.lines) do
+        if l:match "truncated" then
+          found_truncated = true
+          break
+        end
+      end
+      assert.is_true(found_truncated)
+    end)
+
+    it("should render text after a table", function()
+      local body = "| A |\n|---|\n| 1 |\n\nAfter table"
+      local c = build_with_body(body)
+      -- Find "After table" line
+      local found = false
+      for _, l in ipairs(c.lines) do
+        if l == "  After table" then
+          found = true
+          break
+        end
+      end
+      assert.is_true(found)
+    end)
+
+    it("should fall back to markdown for invalid table", function()
+      local body = "| Not a table\n| also not"
+      local c = build_with_body(body)
+      -- Should be rendered as plain markdown lines (not crash)
+      local found = false
+      for _, l in ipairs(c.lines) do
+        if l:match "Not a table" then
+          found = true
+          break
+        end
+      end
+      assert.is_true(found)
+    end)
+
+    it("should render table with 2-space indent", function()
+      local body = "| X |\n|---|\n| Y |"
+      local c = build_with_body(body)
+      -- All table lines should start with "  │"
+      for i = 7, 9 do
+        assert.is_truthy(c.lines[i]:match "^  │")
+      end
+    end)
+
+    it("should preserve link metadata from table cells", function()
+      local body = "| Link |\n|------|\n| [click](https://example.com) |"
+      local c = build_with_body(body)
+      assert.is_true(#c.link_metadata >= 1)
+      local found_link = false
+      for _, lm in ipairs(c.link_metadata) do
+        if lm.url == "https://example.com" then
+          found_link = true
+          break
+        end
+      end
+      assert.is_true(found_link)
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
   -- Group 4: Truncation
   ---------------------------------------------------------------------------
   describe("Truncation", function()

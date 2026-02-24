@@ -294,6 +294,11 @@ PrDisplay.show_demo = function()
     "Should use String highlight as fallback.",
     "```",
     "",
+    "| Feature | Syntax | Highlight Group |",
+    "|---------|--------|-----------------|",
+    "| **Bold** | `**text**` | `Bold` |",
+    "| ~~Strikethrough~~ | `~~text~~` | `DiagnosticDeprecated` |",
+    "",
     "Combined: **bold** with `code` and [link](https://example.com) on one line.",
   }, "\n")
 
