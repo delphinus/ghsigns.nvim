@@ -52,7 +52,7 @@ local PrDisplay = {}
 
 --- Build PR content for display (extracted for testability)
 ---@param pr Ghsigns.Pr
----@param opts? { max_body_lines?: integer }
+---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[] }
 ---@return Ghsigns.PrContent
 PrDisplay.build_pr_content = function(pr, opts)
   local b = ContentBuilder.new()
@@ -237,7 +237,7 @@ local function setup_float_keymaps(buf, ns, win, content)
 end
 
 --- @param pr Ghsigns.Pr
---- @param opts? { max_body_lines?: integer }
+--- @param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[] }
 PrDisplay.show_pr_info = function(pr, opts)
   if float_win:close_if_valid() then
     return
@@ -304,6 +304,8 @@ PrDisplay.show_demo = function()
     "Bare URL (long): https://github.com/neovim/neovim/blob/master/src/nvim/api/buffer.c#L123-L456 is truncated.",
     "",
     "Combined: **bold** with `code` and [link](https://example.com) on one line.",
+    "",
+    "Autolink reference: JIRA-42 is linked, but `JIRA-99` in backticks is not.",
   }, "\n")
 
   local demo_pr = {
@@ -327,7 +329,12 @@ PrDisplay.show_demo = function()
     body = demo_body,
   }
 
-  PrDisplay.show_pr_info(demo_pr, { max_body_lines = math.huge })
+  PrDisplay.show_pr_info(demo_pr, {
+    max_body_lines = math.huge,
+    autolinks = {
+      { key_prefix = "JIRA-", url_template = "https://jira.example.com/browse/JIRA-<num>" },
+    },
+  })
 end
 
 -- Exported for testing

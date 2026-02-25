@@ -533,13 +533,14 @@ end
 ---@param indent string
 ---@param max_width integer
 ---@param repo_base_url? string
-function ContentBuilder:add_table(table_lines, indent, max_width, repo_base_url)
+---@param autolinks? Ghsigns.Autolink[]
+function ContentBuilder:add_table(table_lines, indent, max_width, repo_base_url, autolinks)
   local markdown_table = require "ghsigns.markdown_table"
-  local parsed = markdown_table.parse(table_lines, repo_base_url)
+  local parsed = markdown_table.parse(table_lines, repo_base_url, autolinks)
   if not parsed then
     -- Fallback: render each line as markdown
     for _, line in ipairs(table_lines) do
-      self:add_markdown_line(line, indent, max_width, repo_base_url)
+      self:add_markdown_line(line, indent, max_width, repo_base_url, autolinks)
     end
     return
   end
@@ -564,9 +565,10 @@ end
 ---@param indent string
 ---@param max_width integer
 ---@param repo_base_url? string
-function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url)
+---@param autolinks? Ghsigns.Autolink[]
+function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url, autolinks)
   local markdown = require "ghsigns.markdown"
-  local rendered_text, md_highlights, md_links, special_type, list_marker = markdown.render(text, repo_base_url)
+  local rendered_text, md_highlights, md_links, special_type, list_marker = markdown.render(text, repo_base_url, autolinks)
 
   local quote_prefix = ""
   if special_type == "blockquote" then
@@ -646,7 +648,7 @@ end
 --- Build the body section (description with markdown rendering)
 ---@param self Ghsigns.ContentBuilder
 ---@param p Ghsigns.PrData
----@param opts? { max_body_lines?: integer }
+---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[] }
 function ContentBuilder:build_body(p, opts)
   if not p.body or p.body == "" then
     return
@@ -656,6 +658,7 @@ function ContentBuilder:build_body(p, opts)
   if p.url then
     repo_base_url = p.url:match "(https://[^/]+/[^/]+/[^/]+)"
   end
+  local autolinks = opts and opts.autolinks or nil
 
   self:add_line ""
   self:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
@@ -676,7 +679,7 @@ function ContentBuilder:build_body(p, opts)
   local function flush_table()
     if #table_buf > 0 then
       local lines_before = #self.lines
-      self:add_table(table_buf, "  ", max_width, repo_base_url)
+      self:add_table(table_buf, "  ", max_width, repo_base_url, autolinks)
       local lines_added = #self.lines - lines_before
       lines_shown = lines_shown + lines_added
       table_buf = {}
@@ -751,7 +754,7 @@ function ContentBuilder:build_body(p, opts)
         self:add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "String" } })
       end
     else
-      self:add_markdown_line(body_line, "  ", max_width, repo_base_url)
+      self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks)
     end
 
     local lines_added = #self.lines - lines_before

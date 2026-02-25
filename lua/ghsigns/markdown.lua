@@ -264,6 +264,59 @@ local function process_issue_refs(text, repo_base_url, highlights, links)
   return processed
 end
 
+--- Process autolink references: make key_prefix matches clickable (skip inside backticks)
+---@param text string
+---@param autolinks Ghsigns.Autolink[]
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string processed
+local function process_autolink_refs(text, autolinks, highlights, links)
+  local processed = ""
+  local i = 1
+  local in_backtick = false
+  while i <= #text do
+    if text:sub(i, i) == "`" then
+      in_backtick = not in_backtick
+      processed = processed .. "`"
+      i = i + 1
+    elseif not in_backtick then
+      local matched = false
+      for _, autolink in ipairs(autolinks) do
+        local prefix = autolink.key_prefix
+        if text:sub(i, i + #prefix - 1) == prefix then
+          -- Try to match the value after the prefix
+          local rest = text:sub(i + #prefix)
+          local value
+          if autolink.is_alphanumeric then
+            value = rest:match "^([%w]+)"
+          else
+            value = rest:match "^(%d+)"
+          end
+          if value and #value > 0 then
+            local ref_text = prefix .. value
+            local url = autolink.url_template:gsub("<num>", value)
+            local start_col = #processed
+            processed = processed .. ref_text
+            table.insert(highlights, { col = start_col, end_col = start_col + #ref_text, hl = "Underlined" })
+            table.insert(links, { col_start = start_col, col_end = start_col + #ref_text, url = url })
+            i = i + #ref_text
+            matched = true
+            break
+          end
+        end
+      end
+      if not matched then
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+  return processed
+end
+
 --- Prepend blockquote visual prefix and shift all highlight/link positions
 ---@param text string
 ---@param quote_prefix string
@@ -288,11 +341,12 @@ end
 --- Render markdown text to plain text with highlight and link metadata
 ---@param text string The markdown text to render
 ---@param repo_base_url? string Optional repository base URL for issue/PR references
+---@param autolinks? Ghsigns.Autolink[] Optional autolink definitions
 ---@return string rendered_text The rendered plain text
 ---@return Ghsigns.Markdown.Highlight[] highlights
 ---@return Ghsigns.Markdown.Link[] links
 ---@return string? special_type Special type like "heading" if applicable
-Markdown.render = function(text, repo_base_url)
+Markdown.render = function(text, repo_base_url, autolinks)
   local rendered_text = text:gsub("\r", "")
   -- Collapse multiple consecutive spaces (preserve leading whitespace)
   local leading_ws = rendered_text:match "^(%s*)" or ""
@@ -326,6 +380,9 @@ Markdown.render = function(text, repo_base_url)
   rendered_text = process_bare_urls(rendered_text, MAX_URL_DISPLAY_WIDTH, highlights, links)
   if repo_base_url then
     rendered_text = process_issue_refs(rendered_text, repo_base_url, highlights, links)
+  end
+  if autolinks and #autolinks > 0 then
+    rendered_text = process_autolink_refs(rendered_text, autolinks, highlights, links)
   end
   rendered_text = process_paired_markers(rendered_text, "%*%*([^*]+)%*%*", "Bold", 2, highlights, links)
   rendered_text = process_paired_markers(rendered_text, "~~([^~]+)~~", "DiagnosticDeprecated", 2, highlights, links)
