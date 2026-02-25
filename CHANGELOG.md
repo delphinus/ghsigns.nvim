@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-02-25
+
+### Added
+
+- Autolink references support: ticket IDs (e.g. `JIRA-1234`) in PR descriptions are automatically converted to clickable links
+- Hybrid approach: auto-fetches autolink config from GitHub API with `--hostname` support for GitHub Enterprise, falls back to manual `setup({ autolinks = {...} })` configuration
+- Support for `is_alphanumeric` flag to match alphanumeric or digit-only patterns
+- Autolink references in `show_demo()` for demonstration
+- Autolinks work in markdown body text, tables, and all inline contexts
+
 ## [1.6.0] - 2026-02-25
 
 ### Added
