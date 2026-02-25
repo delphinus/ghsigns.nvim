@@ -345,6 +345,31 @@ describe("PR content rendering", function()
       }, c.link_metadata[1])
     end)
 
+    it("should truncate long bare URLs and preserve clickable link_metadata", function()
+      local long_url = "https://github.com/user/repo/blob/main/very/long/path/to/some/file.lua#L123-L456"
+      local c = build_with_body("See " .. long_url .. " here")
+      -- URL should be truncated in display (has ellipsis)
+      assert.is_truthy(c.lines[7]:match "…")
+      -- Should fit within 80 chars
+      assert.is_true(vim.fn.strdisplaywidth(c.lines[7]) <= 80)
+      -- link_metadata should have the full URL
+      eq(1, #c.link_metadata)
+      eq(long_url, c.link_metadata[1].url)
+      -- Verify the link position matches displayed text ending with "…"
+      local link = c.link_metadata[1]
+      local line_text = c.lines[link.line + 1]
+      local link_text = line_text:sub(link.col_start + 1, link.col_end)
+      assert.is_truthy(link_text:match "…$")
+    end)
+
+    it("should keep short bare URLs as-is with link_metadata", function()
+      local short_url = "https://example.com"
+      local c = build_with_body("Visit " .. short_url)
+      eq("  Visit https://example.com", c.lines[7])
+      eq(1, #c.link_metadata)
+      eq(short_url, c.link_metadata[1].url)
+    end)
+
     it("should render ~~strikethrough~~ with DiagnosticDeprecated highlight", function()
       local c = build_with_body "This is ~~removed~~ text"
       eq("  This is removed text", c.lines[7])

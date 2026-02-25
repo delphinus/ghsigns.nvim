@@ -51,6 +51,93 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Bare URLs", function()
+    it("should keep short URLs as-is with highlight and link", function()
+      local text, highlights, links = markdown.render("See https://example.com here")
+      eq("See https://example.com here", text)
+      local url_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Underlined" then
+          url_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(url_hl)
+      eq("https://example.com", text:sub(url_hl.col + 1, url_hl.end_col))
+      eq(1, #links)
+      eq("https://example.com", links[1].url)
+    end)
+
+    it("should truncate long URLs with ellipsis", function()
+      local long_url = "https://github.com/very/long/path/to/some/resource/that/exceeds/width"
+      local text, highlights, links = markdown.render("See " .. long_url)
+      -- URL should be truncated
+      assert.is_truthy(text:match "…")
+      -- Link should have full URL
+      eq(1, #links)
+      eq(long_url, links[1].url)
+      -- Truncated display should be at most 50 display cols
+      local url_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Underlined" then
+          url_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(url_hl)
+      local display_url = text:sub(url_hl.col + 1, url_hl.end_col)
+      assert.is_true(vim.fn.strdisplaywidth(display_url) <= 50)
+    end)
+
+    it("should not process URLs inside backticks", function()
+      local text, highlights, links = markdown.render("Use `https://example.com` as example")
+      -- After code marker processing, backticks are removed but URL should not be a link
+      eq(0, #links)
+    end)
+
+    it("should strip trailing punctuation from URLs", function()
+      local text, highlights, links = markdown.render("Visit https://example.com.")
+      eq("Visit https://example.com.", text)
+      eq(1, #links)
+      eq("https://example.com", links[1].url)
+      local url_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Underlined" then
+          url_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(url_hl)
+      eq("https://example.com", text:sub(url_hl.col + 1, url_hl.end_col))
+    end)
+
+    it("should handle multiple bare URLs", function()
+      local text, highlights, links = markdown.render("See https://a.com and https://b.com")
+      eq("See https://a.com and https://b.com", text)
+      eq(2, #links)
+      eq("https://a.com", links[1].url)
+      eq("https://b.com", links[2].url)
+    end)
+
+    it("should correctly adjust prior link positions after truncation", function()
+      local long_url = "https://github.com/very/long/path/to/some/resource/that/exceeds/width"
+      local text, highlights, links = markdown.render("[click](https://a.com) and " .. long_url)
+      -- "click" link from process_links, then bare URL
+      eq(2, #links)
+      eq("https://a.com", links[1].url)
+      eq(long_url, links[2].url)
+      -- Verify "click" position is correct in the output text
+      eq("click", text:sub(links[1].col_start + 1, links[1].col_end))
+    end)
+
+    it("should handle http URLs", function()
+      local text, highlights, links = markdown.render("See http://example.com here")
+      eq("See http://example.com here", text)
+      eq(1, #links)
+      eq("http://example.com", links[1].url)
+    end)
+  end)
+
   describe("Bold text", function()
     it("should remove ** markers from bold text", function()
       local text, highlights = markdown.render("This is **bold** text")
