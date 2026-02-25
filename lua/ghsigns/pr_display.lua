@@ -299,6 +299,10 @@ PrDisplay.show_demo = function()
     "| **Bold** | `**text**` | `Bold` |",
     "| ~~Strikethrough~~ | `~~text~~` | `DiagnosticDeprecated` |",
     "",
+    "Bare URL (short): https://neovim.io stays as-is.",
+    "",
+    "Bare URL (long): https://github.com/neovim/neovim/blob/master/src/nvim/api/buffer.c#L123-L456 is truncated.",
+    "",
     "Combined: **bold** with `code` and [link](https://example.com) on one line.",
   }, "\n")
 

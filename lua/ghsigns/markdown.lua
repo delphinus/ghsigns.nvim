@@ -15,6 +15,8 @@
 ---@class Ghsigns.Markdown
 local Markdown = {}
 
+local MAX_URL_DISPLAY_WIDTH = 50
+
 --- Adjust highlight and link positions after character removals
 ---@param highlights Ghsigns.Markdown.Highlight[]
 ---@param links Ghsigns.Markdown.Link[]
@@ -141,6 +143,92 @@ local function process_links(text, highlights, links)
   return processed
 end
 
+--- Process bare URLs: detect standalone URLs, truncate for display, add link metadata with full URL
+---@param text string
+---@param max_url_width integer
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string processed
+local function process_bare_urls(text, max_url_width, highlights, links)
+  local pre_hl_count = #highlights
+  local pre_link_count = #links
+  local processed = ""
+  local i = 1
+  local in_backtick = false
+  local adjustments = {}
+
+  while i <= #text do
+    if text:sub(i, i) == "`" then
+      in_backtick = not in_backtick
+      processed = processed .. "`"
+      i = i + 1
+    elseif not in_backtick then
+      local s, e = text:find("https?://[^%s%)<>]+", i)
+      if s == i then
+        local url_match = text:sub(s, e)
+        -- Strip trailing punctuation (including markdown markers)
+        local url = url_match:gsub("[.,;:!?*~]+$", "")
+        local start_col = #processed
+        local display_url
+
+        if vim.fn.strdisplaywidth(url) > max_url_width then
+          local target = max_url_width - 1
+          local current_width = 0
+          local byte_pos = 0
+          for char in url:gmatch "[%z\1-\127\194-\253][\128-\191]*" do
+            local char_width = vim.fn.strdisplaywidth(char)
+            if current_width + char_width > target then
+              break
+            end
+            current_width = current_width + char_width
+            byte_pos = byte_pos + #char
+          end
+          display_url = url:sub(1, byte_pos) .. "…"
+          table.insert(adjustments, {
+            input_pos = i - 1 + byte_pos,
+            delta = #url - byte_pos - #"…",
+          })
+        else
+          display_url = url
+        end
+
+        processed = processed .. display_url
+        table.insert(highlights, { col = start_col, end_col = start_col + #display_url, hl = "Underlined" })
+        table.insert(links, { col_start = start_col, col_end = start_col + #display_url, url = url })
+        i = i + #url
+      else
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+
+  if #adjustments > 0 then
+    local function adjust(pos)
+      local total_delta = 0
+      for _, adj in ipairs(adjustments) do
+        if pos > adj.input_pos then
+          total_delta = total_delta + adj.delta
+        end
+      end
+      return pos - total_delta
+    end
+    for idx = 1, pre_hl_count do
+      highlights[idx].col = adjust(highlights[idx].col)
+      highlights[idx].end_col = adjust(highlights[idx].end_col)
+    end
+    for idx = 1, pre_link_count do
+      links[idx].col_start = adjust(links[idx].col_start)
+      links[idx].col_end = adjust(links[idx].col_end)
+    end
+  end
+
+  return processed
+end
+
 --- Process #123 issue/PR references: make them clickable (skip inside backticks)
 ---@param text string
 ---@param repo_base_url string
@@ -235,6 +323,7 @@ Markdown.render = function(text, repo_base_url)
 
   -- Process inline elements
   rendered_text = process_links(rendered_text, highlights, links)
+  rendered_text = process_bare_urls(rendered_text, MAX_URL_DISPLAY_WIDTH, highlights, links)
   if repo_base_url then
     rendered_text = process_issue_refs(rendered_text, repo_base_url, highlights, links)
   end
