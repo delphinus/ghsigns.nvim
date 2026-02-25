@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-02-25
+
+### Added
+
+- Bare URL detection and clickable link support in PR descriptions
+- Long URLs (>50 display columns) are truncated with "…" while preserving full URL for clicks
+- Short bare URLs are displayed as-is with underline highlight and click support
+- Bare URL examples added to `show_demo()`
+
 ## [1.4.1] - 2026-02-24
 
 ### Fixed
