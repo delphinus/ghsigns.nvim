@@ -68,10 +68,11 @@ end
 --- Process a cell's text through markdown.render() for inline formatting
 ---@param text string
 ---@param repo_base_url? string
+---@param autolinks? Ghsigns.Autolink[]
 ---@return Ghsigns.MarkdownTable.ParsedCell
-local function process_cell(text, repo_base_url)
+local function process_cell(text, repo_base_url, autolinks)
   local markdown = require "ghsigns.markdown"
-  local rendered, highlights, links = markdown.render(text, repo_base_url)
+  local rendered, highlights, links = markdown.render(text, repo_base_url, autolinks)
   return {
     text = rendered,
     highlights = highlights,
@@ -134,8 +135,9 @@ end
 --- Parse consecutive lines as a Markdown table
 ---@param lines string[]
 ---@param repo_base_url? string
+---@param autolinks? Ghsigns.Autolink[]
 ---@return Ghsigns.MarkdownTable.ParsedTable|nil
-function MarkdownTable.parse(lines, repo_base_url)
+function MarkdownTable.parse(lines, repo_base_url, autolinks)
   if #lines < 2 then
     return nil
   end
@@ -160,7 +162,7 @@ function MarkdownTable.parse(lines, repo_base_url)
   -- Process header cells
   local headers = {}
   for _, cell_text in ipairs(header_cells) do
-    table.insert(headers, process_cell(cell_text, repo_base_url))
+    table.insert(headers, process_cell(cell_text, repo_base_url, autolinks))
   end
 
   -- Process data rows (line 3+)
@@ -173,7 +175,7 @@ function MarkdownTable.parse(lines, repo_base_url)
     local row = {}
     for col = 1, #alignments do
       local cell_text = cells[col] or ""
-      table.insert(row, process_cell(cell_text, repo_base_url))
+      table.insert(row, process_cell(cell_text, repo_base_url, autolinks))
     end
     table.insert(rows, row)
   end

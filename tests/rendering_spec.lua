@@ -1008,7 +1008,53 @@ All 21 tests pass:
   end)
 
   ---------------------------------------------------------------------------
-  -- Group 6: Edge cases
+  -- Group 6: Autolink references in PR body
+  ---------------------------------------------------------------------------
+  describe("Autolink references in PR body", function()
+    it("should linkify autolink references in body text", function()
+      local c = pr_display.build_pr_content({
+        number = 1,
+        title = "T",
+        body = "Fix for JIRA-42 issue",
+        url = "https://github.com/owner/repo/pull/1",
+      }, {
+        autolinks = {
+          { key_prefix = "JIRA-", url_template = "https://jira.example.com/browse/JIRA-<num>" },
+        },
+      })
+      -- Body starts at line 6 (Description: is line 5)
+      eq("  Fix for JIRA-42 issue", c.lines[7])
+      -- Should have link metadata for JIRA-42
+      local found_autolink = false
+      for _, link in ipairs(c.link_metadata) do
+        if link.url == "https://jira.example.com/browse/JIRA-42" then
+          found_autolink = true
+          break
+        end
+      end
+      assert.is_true(found_autolink)
+    end)
+
+    it("should not linkify autolink references inside backticks", function()
+      local c = pr_display.build_pr_content({
+        number = 1,
+        title = "T",
+        body = "Use `JIRA-42` as example",
+        url = "https://github.com/owner/repo/pull/1",
+      }, {
+        autolinks = {
+          { key_prefix = "JIRA-", url_template = "https://jira.example.com/browse/JIRA-<num>" },
+        },
+      })
+      -- Should have no autolink in link_metadata
+      for _, link in ipairs(c.link_metadata) do
+        assert.is_not.equal("https://jira.example.com/browse/JIRA-42", link.url)
+      end
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 7: Edge cases
   ---------------------------------------------------------------------------
   describe("Edge cases", function()
     it("should handle nil body", function()
@@ -1063,7 +1109,7 @@ All 21 tests pass:
   end)
 
   ---------------------------------------------------------------------------
-  -- Group 7: Mergeable visibility
+  -- Group 8: Mergeable visibility
   ---------------------------------------------------------------------------
   describe("Mergeable visibility", function()
     it("should not show Mergeable for MERGED PRs", function()
@@ -1109,7 +1155,7 @@ All 21 tests pass:
   end)
 
   ---------------------------------------------------------------------------
-  -- Group 8: List wrapping continuation indent
+  -- Group 9: List wrapping continuation indent
   ---------------------------------------------------------------------------
   describe("List wrapping continuation indent", function()
     it("should indent continuation lines for dash list items", function()
@@ -1151,7 +1197,7 @@ All 21 tests pass:
   end)
 
   ---------------------------------------------------------------------------
-  -- Group 9: Heading blank line control
+  -- Group 10: Heading blank line control
   ---------------------------------------------------------------------------
   describe("Heading blank line control", function()
     it("should skip blank lines after headings", function()

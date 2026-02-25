@@ -334,6 +334,97 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Autolink references", function()
+    local autolinks = {
+      { key_prefix = "JIRA-", url_template = "https://jira.example.com/browse/JIRA-<num>" },
+    }
+
+    it("should make JIRA-123 clickable when autolinks are provided", function()
+      local text, highlights, links = markdown.render("See JIRA-123 for details", nil, autolinks)
+      eq("See JIRA-123 for details", text)
+      eq(1, #links)
+      eq({
+        col_start = 4,
+        col_end = 12,
+        url = "https://jira.example.com/browse/JIRA-123",
+      }, links[1])
+    end)
+
+    it("should not make JIRA-123 clickable inside backticks", function()
+      local text, highlights, links = markdown.render("Use `JIRA-123` as example", nil, autolinks)
+      eq("Use JIRA-123 as example", text)
+      eq(0, #links)
+    end)
+
+    it("should handle multiple autolink matches", function()
+      local text, highlights, links = markdown.render("See JIRA-123 and JIRA-456", nil, autolinks)
+      eq("See JIRA-123 and JIRA-456", text)
+      eq(2, #links)
+      eq("https://jira.example.com/browse/JIRA-123", links[1].url)
+      eq("https://jira.example.com/browse/JIRA-456", links[2].url)
+    end)
+
+    it("should handle multiple autolink patterns", function()
+      local multi_autolinks = {
+        { key_prefix = "JIRA-", url_template = "https://jira.example.com/browse/JIRA-<num>" },
+        { key_prefix = "GH-", url_template = "https://github.example.com/issues/GH-<num>" },
+      }
+      local text, highlights, links = markdown.render("See JIRA-123 and GH-456", nil, multi_autolinks)
+      eq("See JIRA-123 and GH-456", text)
+      eq(2, #links)
+      eq("https://jira.example.com/browse/JIRA-123", links[1].url)
+      eq("https://github.example.com/issues/GH-456", links[2].url)
+    end)
+
+    it("should handle is_alphanumeric flag", function()
+      local alpha_autolinks = {
+        { key_prefix = "TICKET-", url_template = "https://example.com/ticket/TICKET-<num>", is_alphanumeric = true },
+      }
+      local text, highlights, links = markdown.render("See TICKET-abc123 here", nil, alpha_autolinks)
+      eq("See TICKET-abc123 here", text)
+      eq(1, #links)
+      eq("https://example.com/ticket/TICKET-abc123", links[1].url)
+    end)
+
+    it("should match only digits when is_alphanumeric is false", function()
+      local digit_autolinks = {
+        { key_prefix = "BUG-", url_template = "https://example.com/bug/BUG-<num>" },
+      }
+      local text, highlights, links = markdown.render("See BUG-123abc here", nil, digit_autolinks)
+      eq("See BUG-123abc here", text)
+      eq(1, #links)
+      -- Should only match the digits portion
+      eq("https://example.com/bug/BUG-123", links[1].url)
+      eq("BUG-123", text:sub(links[1].col_start + 1, links[1].col_end))
+    end)
+
+    it("should not break when autolinks is nil", function()
+      local text, highlights, links = markdown.render("See JIRA-123 here", nil, nil)
+      eq("See JIRA-123 here", text)
+      eq(0, #links)
+    end)
+
+    it("should not break when autolinks is empty", function()
+      local text, highlights, links = markdown.render("See JIRA-123 here", nil, {})
+      eq("See JIRA-123 here", text)
+      eq(0, #links)
+    end)
+
+    it("should add Underlined highlight for autolink matches", function()
+      local text, highlights, links = markdown.render("Fix JIRA-42", nil, autolinks)
+      eq("Fix JIRA-42", text)
+      local underlined_hl = nil
+      for _, hl in ipairs(highlights) do
+        if hl.hl == "Underlined" then
+          underlined_hl = hl
+          break
+        end
+      end
+      assert.is_not_nil(underlined_hl)
+      eq("JIRA-42", text:sub(underlined_hl.col + 1, underlined_hl.end_col))
+    end)
+  end)
+
   describe("CR character handling", function()
     it("should remove CR characters", function()
       local text = markdown.render("Line with\r\nCRLF")

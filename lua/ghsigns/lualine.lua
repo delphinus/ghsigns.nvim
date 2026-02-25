@@ -46,6 +46,7 @@ end
 
 ---@return Ghsigns.GitInfo?
 ---@return Ghsigns.Pr?
+---@return Ghsigns.Autolink[]?
 Lualine.get_info = function()
   local ghsigns = require("ghsigns").ghsigns
   if not ghsigns.enabled then
@@ -61,7 +62,7 @@ Lualine.on_click = function(clicks)
   if clicks > 2 then
     return
   end
-  local _, pr = Lualine.get_info()
+  local _, pr, autolinks = Lualine.get_info()
   if not pr or not pr.url then
     vim.notify "No PR information available for this buffer"
     return
@@ -71,7 +72,7 @@ Lualine.on_click = function(clicks)
     assert(vim.uv.new_timer()):start(300, 0, function()
       if wait_double_click then
         wait_double_click = false
-        vim.schedule_wrap(Lualine.show_pr_info)(pr)
+        vim.schedule_wrap(Lualine.show_pr_info)(pr, { autolinks = autolinks })
       end
     end)
   elseif clicks == 2 then

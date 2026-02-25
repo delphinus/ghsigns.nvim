@@ -11,6 +11,7 @@
 ---@class Ghsigns.Config
 ---@field bin? string
 ---@field colors? Ghsigns.Colors
+---@field autolinks? Ghsigns.Autolink[]
 
 ---@class Ghsigns.Ghsigns
 ---@field augroup integer
@@ -18,6 +19,7 @@
 ---@field gh Ghsigns.Gh
 ---@field opts Ghsigns.Config
 ---@field private cache Ghsigns.Cache
+---@field private autolinks_cache table<string, Ghsigns.Autolink[]>
 local Ghsigns = {}
 
 ---@return Ghsigns.Ghsigns
@@ -27,6 +29,7 @@ Ghsigns.new = function()
 
   return setmetatable({
     augroup = vim.api.nvim_create_augroup("ghsigns", {}),
+    autolinks_cache = {},
     cache = Cache.new(),
     enabled = false,
     gh = Gh.new(),
@@ -69,6 +72,7 @@ end
 ---@param bufnr integer
 ---@return Ghsigns.GitInfo? git
 ---@return Ghsigns.Pr? pr
+---@return Ghsigns.Autolink[]? autolinks
 function Ghsigns:get(bufnr)
   if not self.enabled then
     return
@@ -78,7 +82,7 @@ function Ghsigns:get(bufnr)
   if not git_info then
     return
   end
-  return git_info, self.cache:get(git_info)
+  return git_info, self.cache:get(git_info), self.autolinks_cache[git_info.root]
 end
 
 ---@return nil
@@ -118,6 +122,21 @@ function Ghsigns:setup_autocmd()
               self.cache:set(git_info, fetched)
               gs:change_base(git_info.revision, fetched.baseRefName)
               ---@diagnostic disable-next-line: missing-return
+            end
+            -- Fetch autolinks if not cached yet
+            if self.autolinks_cache[git_info.root] == nil then
+              local al_err, al = self.gh:fetch_autolinks(git_info.root)
+              local manual = self.opts.autolinks or {}
+              if al_err then
+                self.autolinks_cache[git_info.root] = manual
+              else
+                -- Merge API results with manual config
+                local merged = vim.deepcopy(al or {})
+                for _, entry in ipairs(manual) do
+                  table.insert(merged, entry)
+                end
+                self.autolinks_cache[git_info.root] = merged
+              end
             end
             ---@diagnostic disable-next-line: missing-return
           end)
