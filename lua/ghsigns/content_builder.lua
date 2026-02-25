@@ -181,18 +181,41 @@ function ContentBuilder:add_metadata_fields(p)
   end
 end
 
+--- Convert an ISO 8601 UTC timestamp to local time string.
+--- Falls back to the original string if parsing fails.
+---@param iso_str string e.g. "2024-01-01T00:00:00Z"
+---@return string e.g. "2024-01-01 09:00:00 JST"
+local function format_local_time(iso_str)
+  local y, m, d, h, min, s = iso_str:match "(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)"
+  if not y then
+    return iso_str
+  end
+  -- os.time treats input as local time; compute UTC offset to correct
+  local t = os.time {
+    year = tonumber(y),
+    month = tonumber(m),
+    day = tonumber(d),
+    hour = tonumber(h),
+    min = tonumber(min),
+    sec = tonumber(s),
+  }
+  local ref = os.time()
+  local offset = os.difftime(ref, os.time(os.date("!*t", ref)))
+  return os.date("%Y-%m-%d %H:%M:%S %Z", t + offset)
+end
+
 --- Add date fields (Created, Updated, Merged)
 ---@param self Ghsigns.ContentBuilder
 ---@param p Ghsigns.PrData
 function ContentBuilder:add_date_fields(p)
   if p.createdAt then
-    self:add_labeled("Created", p.createdAt, "DiagnosticHint")
+    self:add_labeled("Created", format_local_time(p.createdAt), "DiagnosticHint")
   end
   if p.updatedAt then
-    self:add_labeled("Updated", p.updatedAt, "DiagnosticHint")
+    self:add_labeled("Updated", format_local_time(p.updatedAt), "DiagnosticHint")
   end
   if p.mergedAt then
-    self:add_labeled("Merged", p.mergedAt, "DiagnosticOk")
+    self:add_labeled("Merged", format_local_time(p.mergedAt), "DiagnosticOk")
   end
 end
 
@@ -771,4 +794,5 @@ end
 local M = {}
 M.ContentBuilder = ContentBuilder
 M.prepare_pr_data = prepare_pr_data
+M.format_local_time = format_local_time
 return M

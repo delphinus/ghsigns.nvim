@@ -2,11 +2,13 @@ local eq = assert.are.same
 
 describe("PR content rendering", function()
   local pr_display
+  local format_local_time
 
   before_each(function()
     package.loaded["ghsigns.pr_display"] = nil
     package.loaded["ghsigns.content_builder"] = nil
     pr_display = require "ghsigns.pr_display"
+    format_local_time = require("ghsigns.content_builder").format_local_time
   end)
 
   after_each(function()
@@ -192,7 +194,7 @@ describe("PR content rendering", function()
       }, hl_for_line(c, changes_line - 1))
     end)
 
-    it("should show date lines", function()
+    it("should show date lines in local time", function()
       local c = pr_display.build_pr_content {
         number = 1,
         title = "T",
@@ -202,13 +204,13 @@ describe("PR content rendering", function()
       }
       local found_created, found_updated, found_merged = false, false, false
       for _, l in ipairs(c.lines) do
-        if l == "Created: 2024-01-01T00:00:00Z" then
+        if l == "Created: " .. format_local_time("2024-01-01T00:00:00Z") then
           found_created = true
         end
-        if l == "Updated: 2024-01-02T00:00:00Z" then
+        if l == "Updated: " .. format_local_time("2024-01-02T00:00:00Z") then
           found_updated = true
         end
-        if l == "Merged: 2024-01-03T00:00:00Z" then
+        if l == "Merged: " .. format_local_time("2024-01-03T00:00:00Z") then
           found_merged = true
         end
       end
@@ -289,8 +291,8 @@ describe("PR content rendering", function()
         "Changes: +10 -5 (3 files, 2 commits)",
         "Labels: bug, enhancement",
         "",
-        "Created: 2024-01-01T00:00:00Z",
-        "Updated: 2024-01-02T00:00:00Z",
+        "Created: " .. format_local_time("2024-01-01T00:00:00Z"),
+        "Updated: " .. format_local_time("2024-01-02T00:00:00Z"),
         "",
         "✕ Click here to close (or press q/Esc/Enter)",
       }, c.lines)
@@ -912,9 +914,9 @@ All 21 tests pass:
         "State: MERGED",
         "Changes: +280 -39 (4 files, 0 commits)",
         "",
-        "Created: 2026-02-19T02:32:57Z",
-        "Updated: 2026-02-21T01:58:30Z",
-        "Merged: 2026-02-21T01:58:30Z",
+        "Created: " .. format_local_time("2026-02-19T02:32:57Z"),
+        "Updated: " .. format_local_time("2026-02-21T01:58:30Z"),
+        "Merged: " .. format_local_time("2026-02-21T01:58:30Z"),
         "",
         "Description:",
         "  Summary",
@@ -972,9 +974,10 @@ All 21 tests pass:
         { col = 18, end_col = -1, hl = "Comment" },
       }, hl_for_line(pr4_content, 5))
       -- Merged date
+      local merged_value = format_local_time("2026-02-21T01:58:30Z")
       eq({
         { col = 0, end_col = 6, hl = "Comment" },
-        { col = 8, end_col = 28, hl = "DiagnosticOk" },
+        { col = 8, end_col = 8 + #merged_value, hl = "DiagnosticOk" },
       }, hl_for_line(pr4_content, 9))
     end)
 
