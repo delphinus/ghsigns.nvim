@@ -261,7 +261,7 @@ PrDisplay.show_demo = function()
   local demo_body = table.concat({
     "## Heading Example",
     "",
-    "This is **bold text** and this is `inline code` in a paragraph.",
+    "This is **bold text** and this is `inline code` in a paragraph. Normal prose that exceeds the max width is wrapped at word boundaries to keep the floating window compact.",
     "",
     "Visit [Neovim](https://neovim.io) for more info. Also see ~~deprecated feature~~.",
     "",
@@ -292,6 +292,7 @@ PrDisplay.show_demo = function()
     "```",
     "Plain code block without language.",
     "Should use String highlight as fallback.",
+    "This line is intentionally long to demonstrate that code lines exceeding the max width are truncated with an ellipsis character.",
     "```",
     "",
     "| Feature | Syntax | Highlight Group |",

@@ -582,48 +582,6 @@ function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url
   end
 end
 
---- Wrap long lines for code blocks.
---- Uses segment-based splitting to handle CJK/fullwidth characters correctly.
----@param text string
----@param max_width integer
----@param indent string
----@return string[]
-local function wrap_line(text, max_width, indent)
-  local lines_out = {}
-  local current = ""
-  local current_width = 0
-
-  for _, seg in ipairs(split_segments(text)) do
-    local seg_width = vim.fn.strdisplaywidth(seg.text)
-    local space_width = (seg.has_leading_space and current ~= "") and 1 or 0
-
-    if current_width + space_width + seg_width > max_width and current ~= "" then
-      table.insert(lines_out, indent .. current)
-      current = seg.text
-      current_width = seg_width
-    else
-      if current ~= "" then
-        if space_width > 0 then
-          current = current .. " " .. seg.text
-          current_width = current_width + 1 + seg_width
-        else
-          current = current .. seg.text
-          current_width = current_width + seg_width
-        end
-      else
-        current = seg.text
-        current_width = seg_width
-      end
-    end
-  end
-
-  if current ~= "" then
-    table.insert(lines_out, indent .. current)
-  end
-
-  return lines_out
-end
-
 --- Normalize body text: fix line endings, strip HTML, compress blank lines
 ---@param body string
 ---@return string[]
@@ -744,14 +702,24 @@ function ContentBuilder:build_body(p, opts)
       end
       -- Don't call add_line: fence lines are hidden and don't count toward lines_shown
     elseif in_code_block then
-      local display_width = vim.fn.strdisplaywidth(body_line)
+      local indented = "  " .. body_line
+      local display_width = vim.fn.strdisplaywidth(indented)
       if display_width > max_width then
-        local wrapped = wrap_line(body_line, max_width, "  ")
-        for _, wline in ipairs(wrapped) do
-          self:add_line(wline, { { col = 0, end_col = -1, hl = "String" } })
+        -- Truncate long code lines instead of wrapping (wrapping makes code unreadable)
+        local target = max_width - 1 -- reserve 1 col for "…"
+        local current_width = 0
+        local byte_pos = 0
+        for char in indented:gmatch "[%z\1-\127\194-\253][\128-\191]*" do
+          local char_width = vim.fn.strdisplaywidth(char)
+          if current_width + char_width > target then
+            break
+          end
+          current_width = current_width + char_width
+          byte_pos = byte_pos + #char
         end
+        self:add_line(indented:sub(1, byte_pos) .. "…", { { col = 0, end_col = -1, hl = "String" } })
       else
-        self:add_line("  " .. body_line, { { col = 0, end_col = -1, hl = "String" } })
+        self:add_line(indented, { { col = 0, end_col = -1, hl = "String" } })
       end
     else
       self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks)
