@@ -597,12 +597,14 @@ describe("PR content rendering", function()
       eq("https://example.com", c.link_metadata[2].url)
     end)
 
-    it("should wrap CJK text in code blocks", function()
+    it("should truncate CJK text in code blocks", function()
       -- Code block with CJK content exceeding 80 cols (fence lines hidden)
       local code = "```\n" .. string.rep("あ", 42) .. "\n```"
       local c = build_with_body(code)
-      eq("  " .. string.rep("あ", 40), c.lines[7])
-      eq("  " .. string.rep("あ", 2), c.lines[8])
+      -- indent(2) + 38 CJK chars(76) = 78, next char would exceed 79 target, so truncated with "…"
+      eq("  " .. string.rep("あ", 38) .. "…", c.lines[7])
+      -- No second line from wrapping
+      assert.is_not.equal("  " .. string.rep("あ", 2), c.lines[8])
     end)
   end)
 
