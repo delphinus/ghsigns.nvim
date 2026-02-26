@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-02-26
+
+### Changed
+
+- Code block lines exceeding the max width are now truncated with "…" instead of wrapped, improving readability in floating windows
+- Normal prose continues to wrap at word boundaries as before
+
+### Updated
+
+- `show_demo()` now demonstrates both long prose wrapping and code block truncation
+
 ## [1.7.0] - 2026-02-25
 
 ### Added
