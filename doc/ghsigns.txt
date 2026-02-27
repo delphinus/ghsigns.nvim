@@ -12,6 +12,7 @@ Setup			|ghsigns-setup|
 Configuration		|ghsigns-configuration|
 Lualine Integration	|ghsigns-lualine|
 Floating Window		|ghsigns-floating-window|
+Markdown Preview	|ghsigns-md-preview|
 Lua API			|ghsigns-api|
 Highlight Groups	|ghsigns-highlights|
 Demo			|ghsigns-demo|
@@ -193,6 +194,33 @@ Link handling: ~
     |vim.ui.open()|.
 
 ==============================================================================
+MARKDOWN PREVIEW					*ghsigns-md-preview*
+
+Preview the current Markdown buffer's rendered content in a floating window.
+This reuses the same Markdown rendering engine used for PR descriptions.
+
+Usage: >vim
+    :lua require("ghsigns.md_preview").show()
+<
+The current buffer must be a Markdown file (filetype `markdown` or file
+extension `.md` / `.markdown`).
+
+The preview window opens centered on the screen and can be navigated with
+normal Vim motions. Press `q`, `<Esc>`, or `<CR>` to close it.
+
+Options: ~
+
+    {max_width}  (integer|nil)  Maximum display width for rendering.
+                                Default: 80.
+
+    Example: >lua
+      require("ghsigns.md_preview").show({ max_width = 100 })
+<
+
+Unlike PR body rendering, the preview does not truncate content, so the
+full document is always shown.
+
+==============================================================================
 LUA API							*ghsigns-api*
 
 						*ghsigns-api-setup*
@@ -239,6 +267,26 @@ require("ghsigns.pr_display").build_pr_content({pr}, {opts})
 
 require("ghsigns.pr_display").show_demo()
     Show a demo floating window. See |ghsigns-demo|.
+
+						*ghsigns-api-md-preview*
+require("ghsigns.md_preview").show({opts})
+    Preview the current Markdown buffer in a floating window.
+    See |ghsigns-md-preview|.
+
+    Parameters: ~
+      {opts}  (table|nil)  Options table.
+        {max_width}  (integer|nil) Maximum display width. Default: 80.
+
+require("ghsigns.md_preview").build_content({lines}, {opts})
+    Build rendered content from markdown lines without displaying.
+
+    Parameters: ~
+      {lines}  (string[])    Array of markdown lines.
+      {opts}   (table|nil)   Same as |ghsigns-api-md-preview|.
+
+    Returns: ~
+      {content}  (table) Rendered content with lines, highlights,
+                 link_metadata, and code_blocks.
 
 ==============================================================================
 HIGHLIGHT GROUPS					*ghsigns-highlights*
