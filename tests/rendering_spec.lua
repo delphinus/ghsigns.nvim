@@ -679,7 +679,11 @@ describe("PR content rendering", function()
       for i = 1, 10 do
         table.insert(lines, "| " .. i .. " | x |")
       end
-      local c = build_with_body(table.concat(lines, "\n"))
+      local c = pr_display.build_pr_content({
+        number = 1,
+        title = "T",
+        body = table.concat(lines, "\n"),
+      }, { max_body_lines = 15 })
       -- Should contain truncation message
       local found_truncated = false
       for _, l in ipairs(c.lines) do
@@ -771,7 +775,11 @@ describe("PR content rendering", function()
       for i = 1, 20 do
         body_lines[i] = "Line " .. i
       end
-      local c = build_with_body(table.concat(body_lines, "\n"))
+      local c = pr_display.build_pr_content({
+        number = 1,
+        title = "T",
+        body = table.concat(body_lines, "\n"),
+      }, { max_body_lines = 15 })
       -- Should show 15 body lines then truncation
       eq("  Line 15", c.lines[21])
       eq("  ... (truncated)", c.lines[22])
@@ -936,7 +944,74 @@ All 21 tests pass:
         "  │ Additionally, the Cache class only supported get and set. There was no way to:",
         "  │ 1. Clear the entire cache",
         "  │ 2. Invalidate a specific entry",
-        "  ... (truncated)",
+        "  │ 3. Query how many entries are cached",
+        "  ",
+        "  Changes",
+        "  1. Markdown: Strikethrough support",
+        "  Added text parsing in lua/ghsigns/markdown.lua:",
+        "  ",
+        '  -- Strikethrough ~~text~~ - remove markers',
+        '  local s, e = rendered_text:find("~~([^~]+)~~", i)',
+        "  if s == i then",
+        '    local content = rendered_text:match("~~([^~]+)~~", i)',
+        "    -- Apply DiagnosticDeprecated highlight (renders as strikethrough)",
+        "  end",
+        "  ",
+        "  │ Feature       │ Syntax │ Rendered as │ Highlight Group      │",
+        "  │───────────────│────────│─────────────│──────────────────────│",
+        "  │ Bold          │ text   │ text        │ Bold                 │",
+        "  │ Code          │  text  │ text        │ String               │",
+        "  │ Strikethrough │ text   │ text        │ DiagnosticDeprecated │",
+        "  │ Link          │ text   │ text        │ Underlined           │",
+        "  ",
+        "  2. Cache: Management methods",
+        "  Three new methods added to lua/ghsigns/cache.lua:",
+        "  ",
+        "  - Cache:clear() — Wipe all cached PR data",
+        "  - Cache:invalidate(git_info) — Remove a *specific* entry",
+        "  - Cache:size() — Return the number of cached entries",
+        "  ",
+        "  3. Tests",
+        "  New test cases in tests/markdown_spec.lua:",
+        "  ",
+        "  - [x] Single strikethrough segment: removed",
+        "  - [x] Multiple strikethrough segments: first and second",
+        "  - [x] Correct highlight group assignment (DiagnosticDeprecated)",
+        "  - [x] Correct text extraction after marker removal",
+        "  ",
+        "  How to test",
+        "  # Run all tests",
+        "  make test",
+        "  ",
+        "  # Run markdown tests only",
+        "  make test-markdown",
+        "  ",
+        "  Test output (click to expand)",
+        "  ",
+        "  All 21 tests pass:",
+        "  - Headings: 3 tests",
+        "  - Links: 2 tests",
+        "  - Bold text: 2 tests",
+        "  - Code: 2 tests",
+        "  - Issue references: 3 tests",
+        "  - List items: 3 tests",
+        "  - Strikethrough: 2 tests ← NEW",
+        "  - Combined markdown: 2 tests",
+        "  - CR character handling: 2 tests",
+        "  ",
+        "  ---",
+        "  ",
+        "  │ [!NOTE]",
+        "  │ The DiagnosticDeprecated highlight group is built into Neovim (>= 0.9.0) and",
+        "  │ typically renders as strikethrough text, which makes it a natural fit for",
+        "  │ text.",
+        "  ",
+        "  Related",
+        "  - Closes #0 *(demo — no real issue)*",
+        "  - See also: GitHub Flavored Markdown Spec — Strikethrough",
+        "  ",
+        "  🤖 Generated with Claude Code",
+        "  ",
         "",
         "✕ Click here to close (or press q/Esc/Enter)",
       }, pr4_content.lines)
@@ -997,14 +1072,14 @@ All 21 tests pass:
     end)
 
     it("should have link_metadata for the example.com link", function()
-      eq(1, #pr4_content.link_metadata)
+      eq(6, #pr4_content.link_metadata)
       eq("https://example.com", pr4_content.link_metadata[1].url)
       eq(20, pr4_content.link_metadata[1].line)
     end)
 
     it("should have correct meta values", function()
       eq(0, pr4_content.title_line)
-      eq(29, pr4_content.close_line_idx)
+      eq(96, pr4_content.close_line_idx)
       eq("#4 feat: add strikethrough support and cache management", pr4_content.title_text)
     end)
   end)

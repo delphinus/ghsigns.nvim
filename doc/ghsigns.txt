@@ -163,8 +163,9 @@ Markdown rendering: ~
     - Code blocks without language |String| highlight fallback
 
     Lines exceeding 80 characters are wrapped at word boundaries with
-    CJK/fullwidth character support.  The body is truncated to 15 lines
-    by default with a "... (truncated)" indicator.
+    CJK/fullwidth character support.  The full PR description is shown
+    by default.  You can limit the number of lines by passing
+    `max_body_lines` to |ghsigns-api-pr-display|.
 
 Link handling: ~
 
@@ -206,7 +207,7 @@ require("ghsigns.pr_display").show_pr_info({pr}, {opts})
       {pr}    (table)      PR data table (as returned by `gh pr view --json`)
       {opts}  (table|nil)  Options table.
         {max_body_lines}  (integer|nil) Maximum number of body lines to show.
-                          Default: 15.
+                          Default: show all lines (no limit).
 
 require("ghsigns.pr_display").build_pr_content({pr}, {opts})
     Build rendered PR content without displaying it.
