@@ -626,7 +626,7 @@ function ContentBuilder:build_body(p, opts)
   local code_block_lang = nil
   local code_block_start = nil
   local lines_shown = 0
-  local max_lines = (opts and opts.max_body_lines) or 15
+  local max_lines = (opts and opts.max_body_lines) or math.huge
   local max_width = 80
   local prev_was_heading = false
   local prev_was_blank = false
