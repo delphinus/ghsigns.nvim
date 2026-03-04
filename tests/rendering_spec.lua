@@ -1001,7 +1001,7 @@ All 21 tests pass:
         "  ",
         "  ---",
         "  ",
-        "  │ [!NOTE]",
+        "  │ 󰋽 Note",
         "  │ The DiagnosticDeprecated highlight group is built into Neovim (>= 0.9.0) and",
         "  │ typically renders as strikethrough text, which makes it a natural fit for",
         "  │ text.",
@@ -1295,6 +1295,130 @@ All 21 tests pass:
       eq("  Paragraph", c.lines[7])
       eq("  ", c.lines[8])
       eq("  Title", c.lines[9])
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 11: GitHub Alert rendering
+  ---------------------------------------------------------------------------
+  describe("GitHub Alert rendering", function()
+    it("should render alert header with icon and label", function()
+      local c = build_with_body "> [!NOTE]\n> This is a note."
+      eq("  │ 󰋽 Note", c.lines[7])
+      eq("  │ This is a note.", c.lines[8])
+    end)
+
+    it("should apply alert highlight to border on header line", function()
+      local c = build_with_body "> [!NOTE]\n> Content"
+      local header_hl = hl_for_line(c, 6)
+      assert.is_not_nil(header_hl)
+      -- Border should use GhsignsAlertNote instead of FloatBorder
+      local found_alert_hl = false
+      local found_float_border = false
+      for _, g in ipairs(header_hl) do
+        if g.hl == "GhsignsAlertNote" then
+          found_alert_hl = true
+        end
+        if g.hl == "FloatBorder" then
+          found_float_border = true
+        end
+      end
+      assert.is_true(found_alert_hl)
+      assert.is_false(found_float_border)
+    end)
+
+    it("should apply alert background highlight with hl_eol on all alert lines", function()
+      local c = build_with_body "> [!WARNING]\n> Be careful."
+      -- Header line
+      local header_hl = hl_for_line(c, 6)
+      assert.is_not_nil(header_hl)
+      local found_bg = false
+      for _, g in ipairs(header_hl) do
+        if g.hl == "GhsignsAlertWarningBg" and g.hl_eol == true then
+          found_bg = true
+        end
+      end
+      assert.is_true(found_bg)
+      -- Content line
+      local content_hl = hl_for_line(c, 7)
+      assert.is_not_nil(content_hl)
+      found_bg = false
+      for _, g in ipairs(content_hl) do
+        if g.hl == "GhsignsAlertWarningBg" and g.hl_eol == true then
+          found_bg = true
+        end
+      end
+      assert.is_true(found_bg)
+    end)
+
+    it("should apply alert content highlight on header line", function()
+      local c = build_with_body "> [!TIP]\n> Some tip."
+      local header_hl = hl_for_line(c, 6)
+      assert.is_not_nil(header_hl)
+      -- Should have GhsignsAlertTip for the icon+label text (after bar)
+      local found_content_hl = false
+      for _, g in ipairs(header_hl) do
+        if g.hl == "GhsignsAlertTip" and g.col > 0 and not g.hl_eol then
+          found_content_hl = true
+        end
+      end
+      assert.is_true(found_content_hl)
+    end)
+
+    it("should reset alert state when a non-blockquote line follows", function()
+      local c = build_with_body "> [!NOTE]\n> Note content.\n\nNormal text.\n> Regular blockquote."
+      -- The regular blockquote after normal text should NOT have alert highlights
+      -- Find the "Regular blockquote" line
+      local bq_line_idx = nil
+      for i, l in ipairs(c.lines) do
+        if l:match "Regular blockquote" then
+          bq_line_idx = i - 1
+          break
+        end
+      end
+      assert.is_not_nil(bq_line_idx)
+      local bq_hl = hl_for_line(c, bq_line_idx)
+      if bq_hl then
+        for _, g in ipairs(bq_hl) do
+          assert.is_nil(g.hl:match "GhsignsAlert")
+        end
+      end
+    end)
+
+    it("should handle all 5 alert types in rendering", function()
+      local body = "> [!NOTE]\n> n\n\n> [!TIP]\n> t\n\n> [!IMPORTANT]\n> i\n\n> [!WARNING]\n> w\n\n> [!CAUTION]\n> c"
+      local c = build_with_body(body)
+      -- Check each alert type has its corresponding highlight
+      local expected_types = { "Note", "Tip", "Important", "Warning", "Caution" }
+      for _, name in ipairs(expected_types) do
+        local found = false
+        for _, hl_info in ipairs(c.highlights) do
+          for _, g in ipairs(hl_info.groups) do
+            if g.hl == "GhsignsAlert" .. name then
+              found = true
+              break
+            end
+          end
+          if found then break end
+        end
+        assert.is_true(found, "Expected GhsignsAlert" .. name .. " highlight")
+      end
+    end)
+
+    it("should continue alert styling for consecutive blockquote lines", function()
+      local c = build_with_body "> [!CAUTION]\n> Line 1\n> Line 2"
+      -- All three lines (header + 2 content) should have alert bg
+      for line_offset = 0, 2 do
+        local hl = hl_for_line(c, 6 + line_offset)
+        assert.is_not_nil(hl)
+        local found_bg = false
+        for _, g in ipairs(hl) do
+          if g.hl == "GhsignsAlertCautionBg" and g.hl_eol == true then
+            found_bg = true
+          end
+        end
+        assert.is_true(found_bg, "Line offset " .. line_offset .. " should have alert bg")
+      end
     end)
   end)
 end)

@@ -300,6 +300,45 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("GitHub Alerts", function()
+    it("should convert > [!NOTE] to icon + label", function()
+      local text, highlights, links, special_type, list_marker, alert_type = markdown.render("> [!NOTE]")
+      eq("│ 󰋽 Note", text)
+      eq("blockquote", special_type)
+      eq("NOTE", alert_type)
+      eq({ col = 0, end_col = #"│ ", hl = "FloatBorder" }, highlights[1])
+    end)
+
+    it("should return correct alert_type for all 5 types", function()
+      local types = {
+        { input = "> [!NOTE]", label = "󰋽 Note", alert = "NOTE" },
+        { input = "> [!TIP]", label = "󰌶 Tip", alert = "TIP" },
+        { input = "> [!IMPORTANT]", label = "󰅾 Important", alert = "IMPORTANT" },
+        { input = "> [!WARNING]", label = "󰀪 Warning", alert = "WARNING" },
+        { input = "> [!CAUTION]", label = "󰳦 Caution", alert = "CAUTION" },
+      }
+      for _, t in ipairs(types) do
+        local text, _, _, _, _, alert_type = markdown.render(t.input)
+        eq("│ " .. t.label, text)
+        eq(t.alert, alert_type)
+      end
+    end)
+
+    it("should treat > [!UNKNOWN] as normal blockquote", function()
+      local text, highlights, links, special_type, _, alert_type = markdown.render("> [!UNKNOWN]")
+      eq("│ [!UNKNOWN]", text)
+      eq("blockquote", special_type)
+      assert.is_nil(alert_type)
+    end)
+
+    it("should treat > [!NOTE] extra as normal blockquote", function()
+      local text, highlights, links, special_type, _, alert_type = markdown.render("> [!NOTE] extra")
+      eq("│ [!NOTE] extra", text)
+      eq("blockquote", special_type)
+      assert.is_nil(alert_type)
+    end)
+  end)
+
   describe("Combined markdown", function()
     it("should handle links and bold together", function()
       local text = markdown.render("**Important**: See [docs](https://example.com)")
