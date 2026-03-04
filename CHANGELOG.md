@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] - 2026-03-04
+
+### Added
+
+- **Markdown Preview** (experimental): preview the current `.md` buffer in a floating window with the same rendering engine used for PR descriptions (`:lua require("ghsigns.md_preview").show()`)
+- New `display_utils` module extracting shared display utilities (`apply_content_to_buffer`, `open_float_window`, `setup_float_keymaps`, `supports_osc8`) for reuse across PR display and Markdown Preview
+
+### Changed
+
+- Refactored `pr_display` to delegate shared display logic to `display_utils`
+
 ## [1.10.0] - 2026-03-04
 
 ### Added
@@ -208,6 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - embed PR #4 body inline instead of reading from /tmp
 - prevent duplicate link opening in OSC 8 terminals
 
+[1.11.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.8.0...v1.9.0
 [1.3.6]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.5...v1.3.6

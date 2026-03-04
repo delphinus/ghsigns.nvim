@@ -3,8 +3,9 @@
 ---@field private win? integer
 local FloatWin = {}
 
-FloatWin.new = function()
-  return setmetatable({ augroup = "ghsigns_pr_float" }, { __index = FloatWin })
+---@param augroup_name? string
+FloatWin.new = function(augroup_name)
+  return setmetatable({ augroup = augroup_name or "ghsigns_pr_float" }, { __index = FloatWin })
 end
 
 function FloatWin:setup(win)
