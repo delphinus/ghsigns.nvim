@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] - 2026-03-04
+
+### Added
+
+- GitHub Alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) are now rendered with type-specific icons, colored borders, and tinted backgrounds instead of plain blockquotes
+- 10 new highlight groups (`GhsignsAlert{Name}` and `GhsignsAlert{Name}Bg`) for alert styling
+
 ## [1.9.0] - 2026-03-03
 
 ### Changed
@@ -201,6 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - embed PR #4 body inline instead of reading from /tmp
 - prevent duplicate link opening in OSC 8 terminals
 
+[1.10.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.8.0...v1.9.0
 [1.3.6]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.4...v1.3.5

@@ -159,8 +159,24 @@ Markdown rendering: ~
     - Unordered lists (`- item`)   |Special| marker highlight
     - Ordered lists (`1. item`)    |Special| marker highlight
     - Blockquotes (`> text`)       FloatBorder prefix, supports nesting
+    - GitHub Alerts (`> [!NOTE]`)  Icon + colored border + tinted background
     - Code blocks with language    Treesitter syntax highlighting
     - Code blocks without language |String| highlight fallback
+
+GitHub Alerts: ~
+
+    GitHub Flavored Markdown alerts are rendered with type-specific styling:
+
+    Type         Icon   Highlight base ~
+    `[!NOTE]`      󰋽    |DiagnosticInfo| (blue)
+    `[!TIP]`       󰌶    |DiagnosticHint| (teal/green)
+    `[!IMPORTANT]` 󰅾    |Special| (purple)
+    `[!WARNING]`   󰀪    |DiagnosticWarn| (yellow)
+    `[!CAUTION]`   󰳦    |DiagnosticError| (red)
+
+    Each alert type gets a colored border, bold icon + label on the header
+    line, and a tinted background (10% blend of the type color with the
+    Normal background).
 
     Lines exceeding 80 characters are wrapped at word boundaries with
     CJK/fullwidth character support.  The full PR description is shown
@@ -232,6 +248,27 @@ The following highlight groups are defined by the plugin:
     *GhsignsPrTitle*
         PR title in the floating window.  Extends |hl-Title| with underline.
 
+    *GhsignsAlertNote*
+        Border and label for `[!NOTE]` alerts.  Bold, fg from DiagnosticInfo.
+    *GhsignsAlertNoteBg*
+        Background for `[!NOTE]` alerts.  10% blend with Normal bg.
+    *GhsignsAlertTip*
+        Border and label for `[!TIP]` alerts.  Bold, fg from DiagnosticHint.
+    *GhsignsAlertTipBg*
+        Background for `[!TIP]` alerts.  10% blend with Normal bg.
+    *GhsignsAlertImportant*
+        Border and label for `[!IMPORTANT]` alerts.  Bold, fg from Special.
+    *GhsignsAlertImportantBg*
+        Background for `[!IMPORTANT]` alerts.  10% blend with Normal bg.
+    *GhsignsAlertWarning*
+        Border and label for `[!WARNING]` alerts.  Bold, fg from DiagnosticWarn.
+    *GhsignsAlertWarningBg*
+        Background for `[!WARNING]` alerts.  10% blend with Normal bg.
+    *GhsignsAlertCaution*
+        Border and label for `[!CAUTION]` alerts.  Bold, fg from DiagnosticError.
+    *GhsignsAlertCautionBg*
+        Background for `[!CAUTION]` alerts.  10% blend with Normal bg.
+
 The following standard highlight groups are used in the floating window:
 
     Group                   Usage ~
@@ -265,8 +302,9 @@ To visually verify all Markdown rendering features, run: >vim
 This opens a floating window with a dummy PR containing all supported
 Markdown notations:  headings, bold, inline code, links, strikethrough,
 issue references, unordered and ordered lists, blockquotes (including
-nested), code blocks with and without language specification, and combined
-inline formatting.
+nested), GitHub alerts (NOTE, TIP, IMPORTANT, WARNING, CAUTION), code
+blocks with and without language specification, and combined inline
+formatting.
 
 The demo is useful for:
 - Verifying treesitter code block highlighting
