@@ -17,6 +17,15 @@ local Markdown = {}
 
 local MAX_URL_DISPLAY_WIDTH = 50
 
+--- GitHub Flavored Markdown alert types
+local ALERT_TYPES = {
+  NOTE = { icon = "󰋽", label = "Note" },
+  TIP = { icon = "󰌶", label = "Tip" },
+  IMPORTANT = { icon = "󰅾", label = "Important" },
+  WARNING = { icon = "󰀪", label = "Warning" },
+  CAUTION = { icon = "󰳦", label = "Caution" },
+}
+
 --- Adjust highlight and link positions after character removals
 ---@param highlights Ghsigns.Markdown.Highlight[]
 ---@param links Ghsigns.Markdown.Link[]
@@ -346,6 +355,8 @@ end
 ---@return Ghsigns.Markdown.Highlight[] highlights
 ---@return Ghsigns.Markdown.Link[] links
 ---@return string? special_type Special type like "heading" if applicable
+---@return string? list_marker List marker if applicable
+---@return string? alert_type Alert type (NOTE, TIP, etc.) if applicable
 Markdown.render = function(text, repo_base_url, autolinks)
   local rendered_text = text:gsub("\r", "")
   -- Collapse multiple consecutive spaces (preserve leading whitespace)
@@ -369,6 +380,17 @@ Markdown.render = function(text, repo_base_url, autolinks)
     rendered_text = rendered_text:gsub("^>%s?", "", 1)
     quote_prefix = quote_prefix .. "│ "
     is_blockquote = true
+  end
+
+  -- Detect GitHub alert syntax [!TYPE] in blockquotes (must be exactly "[!TYPE]" with nothing else)
+  if is_blockquote then
+    local alert_key = rendered_text:match "^%[!(%u+)%]$"
+    if alert_key and ALERT_TYPES[alert_key] then
+      local alert = ALERT_TYPES[alert_key]
+      rendered_text = alert.icon .. " " .. alert.label
+      rendered_text = apply_blockquote_prefix(rendered_text, quote_prefix, highlights, links)
+      return rendered_text, highlights, links, "blockquote", nil, alert_key
+    end
   end
 
   -- List items (- * 1.) - detect marker

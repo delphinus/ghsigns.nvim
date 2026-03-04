@@ -50,6 +50,27 @@ end
 
 local PrDisplay = {}
 
+--- Blend two colors by alpha (0.0 = bg, 1.0 = fg)
+---@param fg integer foreground color (0xRRGGBB)
+---@param bg integer background color (0xRRGGBB)
+---@param alpha number blend factor (0.0–1.0)
+---@return integer blended color
+local function blend_color(fg, bg, alpha)
+  local r = math.floor(bit.rshift(fg, 16) * alpha + bit.rshift(bg, 16) * (1 - alpha) + 0.5)
+  local g = math.floor(bit.band(bit.rshift(fg, 8), 0xFF) * alpha + bit.band(bit.rshift(bg, 8), 0xFF) * (1 - alpha) + 0.5)
+  local b = math.floor(bit.band(fg, 0xFF) * alpha + bit.band(bg, 0xFF) * (1 - alpha) + 0.5)
+  return bit.lshift(r, 16) + bit.lshift(g, 8) + b
+end
+
+--- Alert type definitions: base highlight group for each alert type
+local ALERT_HL_BASES = {
+  Note = "DiagnosticInfo",
+  Tip = "DiagnosticHint",
+  Important = "Special",
+  Warning = "DiagnosticWarn",
+  Caution = "DiagnosticError",
+}
+
 --- Build PR content for display (extracted for testability)
 ---@param pr Ghsigns.Pr
 ---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[] }
@@ -120,10 +141,14 @@ local function apply_content_to_buffer(buf, ns, content, pr_url)
         if end_col == -1 or end_col > #line_text then
           end_col = #line_text
         end
-        vim.api.nvim_buf_set_extmark(buf, ns, hl_info.line, group.col, {
+        local extmark_opts = {
           end_col = end_col,
           hl_group = group.hl,
-        })
+        }
+        if group.hl_eol then
+          extmark_opts.hl_eol = true
+        end
+        vim.api.nvim_buf_set_extmark(buf, ns, hl_info.line, group.col, extmark_opts)
       end
     end
   end
@@ -250,6 +275,20 @@ PrDisplay.show_pr_info = function(pr, opts)
   title_hl.underline = true
   vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
 
+  -- Create alert highlight groups
+  local normal_hl = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
+  if not normal_hl.bg then
+    normal_hl = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+  end
+  local normal_bg = normal_hl.bg or 0x1e1e2e
+
+  for name, base_hl_name in pairs(ALERT_HL_BASES) do
+    local base_hl = vim.api.nvim_get_hl(0, { name = base_hl_name, link = false })
+    local fg = base_hl.fg or 0xFFFFFF
+    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name, { fg = fg, bold = true, default = true })
+    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name .. "Bg", { bg = blend_color(fg, normal_bg, 0.1), default = true })
+  end
+
   local content = PrDisplay.build_pr_content(pr, opts)
   apply_content_to_buffer(buf, ns, content, pr.url)
   local win = open_float_window(buf, content)
@@ -307,6 +346,21 @@ PrDisplay.show_demo = function()
     "Combined: **bold** with `code` and [link](https://example.com) on one line.",
     "",
     "Autolink reference: JIRA-42 is linked, but `JIRA-99` in backticks is not.",
+    "",
+    "> [!NOTE]",
+    "> This is a note alert.",
+    "",
+    "> [!TIP]",
+    "> This is a tip alert.",
+    "",
+    "> [!IMPORTANT]",
+    "> This is an important alert.",
+    "",
+    "> [!WARNING]",
+    "> This is a warning alert.",
+    "",
+    "> [!CAUTION]",
+    "> This is a caution alert.",
   }, "\n")
 
   local demo_pr = {
@@ -343,5 +397,6 @@ PrDisplay._supports_osc8 = supports_osc8
 PrDisplay._reset_osc8_cache = function()
   _osc8_supported = nil
 end
+PrDisplay._blend_color = blend_color
 
 return PrDisplay

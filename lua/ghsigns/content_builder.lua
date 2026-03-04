@@ -5,6 +5,7 @@
 ---@field col integer 0-indexed start column
 ---@field end_col integer 0-indexed end column (-1 means end of line)
 ---@field hl string highlight group name
+---@field hl_eol? boolean extend highlight to end of line
 
 ---@class Ghsigns.LineHighlight
 ---@field line integer 0-indexed line number
@@ -566,9 +567,11 @@ end
 ---@param max_width integer
 ---@param repo_base_url? string
 ---@param autolinks? Ghsigns.Autolink[]
+---@return string? alert_type Alert type if this line is an alert header
 function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url, autolinks)
   local markdown = require "ghsigns.markdown"
-  local rendered_text, md_highlights, md_links, special_type, list_marker = markdown.render(text, repo_base_url, autolinks)
+  local rendered_text, md_highlights, md_links, special_type, list_marker, alert_type =
+    markdown.render(text, repo_base_url, autolinks)
 
   local quote_prefix = ""
   if special_type == "blockquote" then
@@ -579,6 +582,68 @@ function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url
     self:add_wrapped_markdown(rendered_text, md_highlights, md_links, indent, max_width, quote_prefix, list_marker)
   else
     self:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
+  end
+
+  return alert_type
+end
+
+--- Apply alert styling to lines added between lines_before and current line count
+---@param self Ghsigns.ContentBuilder
+---@param lines_before integer Line count before adding the alert line(s)
+---@param lines_after integer Line count after adding the alert line(s)
+---@param alert_type string Alert type key (e.g. "NOTE", "WARNING")
+---@param is_header boolean Whether this is the alert header line (with icon+label)
+function ContentBuilder:apply_alert_styling(lines_before, lines_after, alert_type, is_header)
+  local alert_hl = "GhsignsAlert" .. alert_type:sub(1, 1) .. alert_type:sub(2):lower()
+  local alert_bg_hl = alert_hl .. "Bg"
+
+  for _, hl_info in ipairs(self.highlights) do
+    if hl_info.line >= lines_before and hl_info.line < lines_after then
+      -- Replace FloatBorder highlights with alert-colored border
+      for _, group in ipairs(hl_info.groups) do
+        if group.hl == "FloatBorder" then
+          group.hl = alert_hl
+        end
+      end
+
+      -- On header line, add alert highlight for content after the bar
+      if is_header and hl_info.line == lines_before then
+        local line_text = self.lines[hl_info.line + 1]
+        if line_text then
+          -- Find end of blockquote prefix (after "│ ")
+          local bar_end = 0
+          for _, group in ipairs(hl_info.groups) do
+            if group.hl == alert_hl then
+              bar_end = group.end_col
+              break
+            end
+          end
+          if bar_end > 0 then
+            table.insert(hl_info.groups, { col = bar_end, end_col = #line_text, hl = alert_hl })
+          end
+        end
+      end
+
+      -- Add background highlight for the entire line
+      table.insert(hl_info.groups, { col = 0, end_col = -1, hl = alert_bg_hl, hl_eol = true })
+    end
+  end
+
+  -- Also handle lines that have no existing highlights (shouldn't happen for blockquotes, but be safe)
+  for line_idx = lines_before, lines_after - 1 do
+    local has_hl = false
+    for _, hl_info in ipairs(self.highlights) do
+      if hl_info.line == line_idx then
+        has_hl = true
+        break
+      end
+    end
+    if not has_hl then
+      table.insert(self.highlights, {
+        line = line_idx,
+        groups = { { col = 0, end_col = -1, hl = alert_bg_hl, hl_eol = true } },
+      })
+    end
   end
 end
 
@@ -632,6 +697,7 @@ function ContentBuilder:build_body(p, opts)
   local prev_was_blank = false
   local table_buf = {}
   local truncated = false
+  local current_alert_type = nil
 
   --- Flush accumulated table lines
   local function flush_table()
@@ -722,7 +788,16 @@ function ContentBuilder:build_body(p, opts)
         self:add_line(indented, { { col = 0, end_col = -1, hl = "String" } })
       end
     else
-      self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks)
+      local alert_type = self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks)
+      local lines_after = #self.lines
+      if alert_type then
+        current_alert_type = alert_type
+        self:apply_alert_styling(lines_before, lines_after, current_alert_type, true)
+      elseif current_alert_type and body_line:match "^>" then
+        self:apply_alert_styling(lines_before, lines_after, current_alert_type, false)
+      else
+        current_alert_type = nil
+      end
     end
 
     local lines_added = #self.lines - lines_before
