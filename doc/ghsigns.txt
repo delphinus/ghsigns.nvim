@@ -196,6 +196,8 @@ Link handling: ~
 ==============================================================================
 MARKDOWN PREVIEW					*ghsigns-md-preview*
 
+NOTE: This feature is experimental and its API may change in future releases.
+
 Preview the current Markdown buffer's rendered content in a floating window.
 This reuses the same Markdown rendering engine used for PR descriptions.
 
@@ -270,7 +272,7 @@ require("ghsigns.pr_display").show_demo()
 
 						*ghsigns-api-md-preview*
 require("ghsigns.md_preview").show({opts})
-    Preview the current Markdown buffer in a floating window.
+    (Experimental) Preview the current Markdown buffer in a floating window.
     See |ghsigns-md-preview|.
 
     Parameters: ~
