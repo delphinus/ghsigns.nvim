@@ -92,20 +92,28 @@ PrDisplay.show_pr_info = function(pr, opts)
   PrDisplay.setup_alert_highlights()
 
   local fold_state = {}
+  local expand_state = {}
   opts = opts or {}
+  local content
 
   local function rebuild()
     opts.fold_state = fold_state
+    opts.expand_state = expand_state
     local new_content = PrDisplay.build_pr_content(pr, opts)
     vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
     vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
     display_utils.apply_content_to_buffer(buf, ns, new_content, { title_url = pr.url })
     vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-    -- Update content reference for subsequent clicks
+    -- Toggle wrap based on whether any block is expanded
+    local any_expanded = false
+    for _, v in pairs(expand_state) do
+      if v then any_expanded = true; break end
+    end
+    vim.api.nvim_set_option_value("wrap", not any_expanded, { win = win })
     content = new_content
   end
 
-  local content = PrDisplay.build_pr_content(pr, opts)
+  content = PrDisplay.build_pr_content(pr, opts)
   display_utils.apply_content_to_buffer(buf, ns, content, { title_url = pr.url })
   local win = display_utils.open_float_window(buf, content, float_win)
 
@@ -121,6 +129,10 @@ PrDisplay.show_pr_info = function(pr, opts)
     end,
     on_fold_toggle = function(source_line, collapsed)
       fold_state[source_line] = collapsed
+      rebuild()
+    end,
+    on_expand_toggle = function(block_id, expanded)
+      expand_state[block_id] = expanded
       rebuild()
     end,
   })
@@ -199,6 +211,33 @@ PrDisplay.show_demo = function()
     "",
     "> [!TIP]+ Expanded by default",
     "> This content is visible but can be collapsed by clicking.",
+    "",
+    "> [!custom] Unknown callout types",
+    "> Any `[!type]` works as a callout, even unlisted ones like `[!custom]`.",
+    "",
+    "> [!NOTE] Code block inside callout",
+    "> ```lua",
+    "> local greeting = 'Hello from inside a callout!'",
+    "> print(greeting)",
+    "> ```",
+    "> The code above has treesitter highlighting.",
+    "",
+    "## Expandable Content",
+    "",
+    "Click the underlined `…` on truncated lines to expand. Click the block again to collapse.",
+    "",
+    "```bash",
+    "# This line is intentionally very long to demonstrate the expandable code block feature — click the … to see the full content and scroll horizontally",
+    "echo 'short line'",
+    "```",
+    "",
+    "| Feature | Description | Status |",
+    "|---------|-------------|--------|",
+    "| Foldable callouts | Click header to toggle `[!TYPE]+` / `[!TYPE]-` | Implemented |",
+    "| Code in callouts | Treesitter highlighting inside `> ```lang` blocks | Implemented |",
+    "| Expandable blocks | Click underlined `…` to show full truncated content | Implemented |",
+    "",
+    "Obsidian ==highlight== markers and `%%hidden comments%%` are also supported.",
   }, "\n")
 
   local demo_pr = {

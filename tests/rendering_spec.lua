@@ -1583,4 +1583,122 @@ All 21 tests pass:
       end
     end)
   end)
+
+  ---------------------------------------------------------------------------
+  -- Group 14: Expandable code blocks
+  ---------------------------------------------------------------------------
+  describe("Expandable code blocks", function()
+    -- Build a body with a long code line that will be truncated at max_width=80
+    local long_line = "echo " .. string.rep("a", 120)
+    local body = "```bash\n" .. long_line .. "\n```"
+
+    it("should truncate long code lines with underlined ellipsis by default", function()
+      local c = build_with_body(body)
+      -- Find the code line
+      local code_line = nil
+      for _, l in ipairs(c.lines) do
+        if l:match "echo" then
+          code_line = l
+          break
+        end
+      end
+      assert.is_not_nil(code_line)
+      assert.is_not_nil(code_line:match "…$", "Should end with …")
+      -- Check Underlined highlight on the …
+      local found_underlined = false
+      for _, hl_info in ipairs(c.highlights) do
+        for _, g in ipairs(hl_info.groups) do
+          if g.hl == "Underlined" then
+            found_underlined = true
+          end
+        end
+      end
+      assert.is_true(found_underlined, "… should have Underlined highlight")
+    end)
+
+    it("should register expandable_region for truncated code block", function()
+      local c = build_with_body(body)
+      assert.is_true(#c.expandable_regions >= 1)
+      assert.is_false(c.expandable_regions[1].expanded)
+    end)
+
+    it("should show full line when expanded via expand_state", function()
+      -- First build to get block_id
+      local c1 = build_with_body(body)
+      local block_id = c1.expandable_regions[1].block_id
+      -- Build with expanded state
+      local c2 = build_with_body(body, nil, { expand_state = { [block_id] = true } })
+      local code_line = nil
+      for _, l in ipairs(c2.lines) do
+        if l:match "echo" then
+          code_line = l
+          break
+        end
+      end
+      assert.is_not_nil(code_line)
+      assert.is_nil(code_line:match "…", "Should not have … when expanded")
+      assert.is_true(#code_line > 80, "Should show full line when expanded")
+    end)
+
+    it("should not register expandable_region for short code blocks", function()
+      local c = build_with_body "```bash\necho hi\n```"
+      eq(0, #c.expandable_regions)
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 15: Expandable tables
+  ---------------------------------------------------------------------------
+  describe("Expandable tables", function()
+    -- Build a table with a very long cell that will be truncated
+    local long_cell = string.rep("x", 100)
+    local table_body = "| Header |\n|---|\n| " .. long_cell .. " |"
+
+    it("should truncate wide table cells with underlined ellipsis", function()
+      local c = build_with_body(table_body)
+      -- Find a line containing the truncated cell
+      local found_ellipsis = false
+      for _, l in ipairs(c.lines) do
+        if l:match "…" and l:match "xxx" then
+          found_ellipsis = true
+        end
+      end
+      assert.is_true(found_ellipsis, "Table cell should be truncated with …")
+      -- Check Underlined highlight on the …
+      local found_underlined = false
+      for _, hl_info in ipairs(c.highlights) do
+        for _, g in ipairs(hl_info.groups) do
+          if g.hl == "Underlined" then
+            found_underlined = true
+          end
+        end
+      end
+      assert.is_true(found_underlined, "… in table should have Underlined highlight")
+    end)
+
+    it("should register expandable_region for truncated table", function()
+      local c = build_with_body(table_body)
+      assert.is_true(#c.expandable_regions >= 1)
+      assert.is_false(c.expandable_regions[1].expanded)
+    end)
+
+    it("should show full table when expanded via expand_state", function()
+      local c1 = build_with_body(table_body)
+      local block_id = c1.expandable_regions[1].block_id
+      local c2 = build_with_body(table_body, nil, { expand_state = { [block_id] = true } })
+      -- No … should remain
+      local has_ellipsis = false
+      for _, l in ipairs(c2.lines) do
+        if l:match "…" and l:match "xxx" then
+          has_ellipsis = true
+        end
+      end
+      assert.is_false(has_ellipsis, "Table should not have … when expanded")
+    end)
+
+    it("should not register expandable_region for small tables", function()
+      local c = build_with_body "| A |\n|---|\n| B |"
+      eq(0, #c.expandable_regions)
+    end)
+  end)
 end)

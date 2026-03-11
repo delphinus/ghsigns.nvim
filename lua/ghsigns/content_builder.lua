@@ -29,12 +29,19 @@
 ---@field source_line integer 1-indexed source line index
 ---@field collapsed boolean current fold state
 
+---@class Ghsigns.ExpandableRegion
+---@field start_line integer 0-indexed first rendered line of the region
+---@field end_line integer 0-indexed last rendered line of the region
+---@field block_id integer unique identifier for expand_state lookup
+---@field expanded boolean current state
+
 ---@class Ghsigns.PrContent
 ---@field lines string[]
 ---@field highlights Ghsigns.LineHighlight[]
 ---@field link_metadata Ghsigns.LinkMetadata[]
 ---@field code_blocks Ghsigns.CodeBlock[]
 ---@field callout_folds Ghsigns.CalloutFold[]
+---@field expandable_regions Ghsigns.ExpandableRegion[]
 ---@field title_line integer
 ---@field title_text string
 ---@field close_line_idx integer
@@ -45,6 +52,7 @@
 ---@field link_metadata Ghsigns.LinkMetadata[]
 ---@field code_blocks Ghsigns.CodeBlock[]
 ---@field callout_folds Ghsigns.CalloutFold[]
+---@field expandable_regions Ghsigns.ExpandableRegion[]
 local ContentBuilder = {}
 
 ---@return Ghsigns.ContentBuilder
@@ -55,6 +63,7 @@ function ContentBuilder.new()
     link_metadata = {},
     code_blocks = {},
     callout_folds = {},
+    expandable_regions = {},
   }, { __index = ContentBuilder })
 end
 
@@ -86,6 +95,7 @@ function ContentBuilder:result()
     link_metadata = self.link_metadata,
     code_blocks = self.code_blocks,
     callout_folds = self.callout_folds,
+    expandable_regions = self.expandable_regions,
   }
 end
 
@@ -698,7 +708,7 @@ end
 --- Build the body section (description with markdown rendering)
 ---@param self Ghsigns.ContentBuilder
 ---@param p Ghsigns.PrData
----@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[], fold_state?: table<integer, boolean> }
+---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[], fold_state?: table<integer, boolean>, expand_state?: table<integer, boolean> }
 function ContentBuilder:build_body(p, opts)
   if not p.body or p.body == "" then
     return
@@ -710,6 +720,7 @@ function ContentBuilder:build_body(p, opts)
   end
   local autolinks = opts and opts.autolinks or nil
   local fold_state = opts and opts.fold_state or {}
+  local expand_state = opts and opts.expand_state or {}
 
   self:add_line ""
   self:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
@@ -719,12 +730,15 @@ function ContentBuilder:build_body(p, opts)
   local code_block_lang = nil
   local code_block_start = nil
   local code_source_lines = nil
+  local code_block_id = nil
+  local code_block_has_truncation = false
   local lines_shown = 0
   local max_lines = (opts and opts.max_body_lines) or math.huge
   local max_width = 80
   local prev_was_heading = false
   local prev_was_blank = false
   local table_buf = {}
+  local table_buf_start_idx = nil
   local truncated = false
   local current_alert_type = nil
   local skip_callout_body = false
@@ -733,16 +747,39 @@ function ContentBuilder:build_body(p, opts)
   local callout_code_start = nil
   local callout_code_prefix = nil
   local callout_code_source_lines = nil
+  local callout_code_block_id = nil
+  local callout_code_has_truncation = false
   local in_comment_block = false
 
   --- Flush accumulated table lines
   local function flush_table()
     if #table_buf > 0 then
       local lines_before = #self.lines
-      self:add_table(table_buf, "  ", max_width, repo_base_url, autolinks)
+      local tbl_expanded = table_buf_start_idx and expand_state[table_buf_start_idx]
+      local effective_max = tbl_expanded and math.huge or max_width
+      self:add_table(table_buf, "  ", effective_max, repo_base_url, autolinks)
       local lines_added = #self.lines - lines_before
       lines_shown = lines_shown + lines_added
+      -- Check if any table line was truncated (has …)
+      local has_truncation = false
+      if not tbl_expanded then
+        for li = lines_before + 1, #self.lines do
+          if self.lines[li] and self.lines[li]:match "…" then
+            has_truncation = true
+            break
+          end
+        end
+      end
+      if has_truncation or tbl_expanded then
+        table.insert(self.expandable_regions, {
+          start_line = lines_before,
+          end_line = #self.lines - 1,
+          block_id = table_buf_start_idx,
+          expanded = tbl_expanded or false,
+        })
+      end
       table_buf = {}
+      table_buf_start_idx = nil
     end
   end
 
@@ -772,6 +809,9 @@ function ContentBuilder:build_body(p, opts)
 
     -- Accumulate table lines
     if is_table_line then
+      if #table_buf == 0 then
+        table_buf_start_idx = src_idx
+      end
       table.insert(table_buf, body_line)
       goto continue
     end
@@ -811,6 +851,8 @@ function ContentBuilder:build_body(p, opts)
         code_block_lang = body_line:match "^```(%S+)" or nil
         code_block_start = #self.lines -- 0-indexed position of next code line
         code_source_lines = {}
+        code_block_id = src_idx
+        code_block_has_truncation = false
       else
         if code_block_lang and code_block_start < #self.lines then
           table.insert(self.code_blocks, {
@@ -820,17 +862,26 @@ function ContentBuilder:build_body(p, opts)
             source_lines = code_source_lines,
           })
         end
+        if code_block_has_truncation or expand_state[code_block_id] then
+          table.insert(self.expandable_regions, {
+            start_line = code_block_start,
+            end_line = #self.lines - 1,
+            block_id = code_block_id,
+            expanded = expand_state[code_block_id] or false,
+          })
+        end
         in_code_block = false
         code_block_lang = nil
         code_source_lines = nil
+        code_block_id = nil
       end
       -- Don't call add_line: fence lines are hidden and don't count toward lines_shown
     elseif in_code_block then
       table.insert(code_source_lines, body_line)
       local indented = "  " .. body_line
       local display_width = vim.fn.strdisplaywidth(indented)
-      if display_width > max_width then
-        -- Truncate long code lines instead of wrapping (wrapping makes code unreadable)
+      if not expand_state[code_block_id] and display_width > max_width then
+        code_block_has_truncation = true
         local target = max_width - 1 -- reserve 1 col for "…"
         local current_width = 0
         local byte_pos = 0
@@ -842,7 +893,11 @@ function ContentBuilder:build_body(p, opts)
           current_width = current_width + char_width
           byte_pos = byte_pos + #char
         end
-        self:add_line(indented:sub(1, byte_pos) .. "…", { { col = 0, end_col = -1, hl = "String" } })
+        local truncated_line = indented:sub(1, byte_pos) .. "…"
+        self:add_line(truncated_line, {
+          { col = 0, end_col = byte_pos, hl = "String" },
+          { col = byte_pos, end_col = #truncated_line, hl = "Underlined" },
+        })
       else
         self:add_line(indented, { { col = 0, end_col = -1, hl = "String" } })
       end
@@ -859,6 +914,8 @@ function ContentBuilder:build_body(p, opts)
             callout_code_prefix = "  │ "
             callout_code_start = #self.lines
             callout_code_source_lines = {}
+            callout_code_block_id = src_idx
+            callout_code_has_truncation = false
           else
             if callout_code_lang and callout_code_start < #self.lines then
               table.insert(self.code_blocks, {
@@ -869,16 +926,26 @@ function ContentBuilder:build_body(p, opts)
                 source_lines = callout_code_source_lines,
               })
             end
+            if callout_code_has_truncation or expand_state[callout_code_block_id] then
+              table.insert(self.expandable_regions, {
+                start_line = callout_code_start,
+                end_line = #self.lines - 1,
+                block_id = callout_code_block_id,
+                expanded = expand_state[callout_code_block_id] or false,
+              })
+            end
             in_callout_code_block = false
             callout_code_lang = nil
             callout_code_source_lines = nil
+            callout_code_block_id = nil
           end
           handled = true
         elseif in_callout_code_block then
           table.insert(callout_code_source_lines, stripped)
           local code_line = callout_code_prefix .. stripped
           local display_width = vim.fn.strdisplaywidth(code_line)
-          if display_width > max_width then
+          if not expand_state[callout_code_block_id] and display_width > max_width then
+            callout_code_has_truncation = true
             local target = max_width - 1
             local current_width = 0
             local byte_pos = 0
@@ -890,12 +957,18 @@ function ContentBuilder:build_body(p, opts)
               current_width = current_width + char_width
               byte_pos = byte_pos + #char
             end
-            code_line = code_line:sub(1, byte_pos) .. "…"
+            local truncated_code = code_line:sub(1, byte_pos) .. "…"
+            self:add_line(truncated_code, {
+              { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
+              { col = #callout_code_prefix, end_col = byte_pos, hl = "String" },
+              { col = byte_pos, end_col = #truncated_code, hl = "Underlined" },
+            })
+          else
+            self:add_line(code_line, {
+              { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
+              { col = #callout_code_prefix, end_col = -1, hl = "String" },
+            })
           end
-          self:add_line(code_line, {
-            { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
-            { col = #callout_code_prefix, end_col = -1, hl = "String" },
-          })
           self:apply_alert_styling(lines_before, #self.lines, current_alert_type, false)
           handled = true
         end

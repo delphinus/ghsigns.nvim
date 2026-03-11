@@ -293,6 +293,12 @@ function MarkdownTable.render(parsed_table, indent, max_width)
             })
           end
         end
+        -- Add Underlined highlight on the "…" to indicate clickable
+        table.insert(clipped_hls, {
+          col = truncated_byte_len,
+          end_col = truncated_byte_len + #"…",
+          hl = "Underlined",
+        })
         cell_hls = clipped_hls
         -- Clip links to the kept portion
         local clipped_links = {}

@@ -235,11 +235,12 @@ end
 ---@param win integer
 ---@param content Ghsigns.PrContent
 ---@param float_win Ghsigns.FloatWin
----@param opts? { close_line_idx?: integer, on_fold_toggle?: fun(source_line: integer, collapsed: boolean), get_content?: fun(): Ghsigns.PrContent }
+---@param opts? { close_line_idx?: integer, on_fold_toggle?: fun(source_line: integer, collapsed: boolean), on_expand_toggle?: fun(block_id: integer, expanded: boolean), get_content?: fun(): Ghsigns.PrContent }
 function M.setup_float_keymaps(buf, ns, win, content, float_win, opts)
   opts = opts or {}
   local close_line_idx = opts.close_line_idx
   local on_fold_toggle = opts.on_fold_toggle
+  local on_expand_toggle = opts.on_expand_toggle
   local get_content = opts.get_content or function()
     return content
   end
@@ -257,10 +258,11 @@ function M.setup_float_keymaps(buf, ns, win, content, float_win, opts)
         return
       end
 
-      -- Check for foldable callout header click
       local cur_content = get_content()
+      local click_line = mouse.line - 1 -- 0-indexed
+
+      -- Check for foldable callout header click
       if on_fold_toggle and cur_content.callout_folds then
-        local click_line = mouse.line - 1 -- 0-indexed
         for _, fold in ipairs(cur_content.callout_folds) do
           if fold.header_line == click_line then
             on_fold_toggle(fold.source_line, not fold.collapsed)
@@ -269,10 +271,19 @@ function M.setup_float_keymaps(buf, ns, win, content, float_win, opts)
         end
       end
 
+      -- Check for expandable region click (code blocks / tables)
+      if on_expand_toggle and cur_content.expandable_regions then
+        for _, region in ipairs(cur_content.expandable_regions) do
+          if click_line >= region.start_line and click_line <= region.end_line then
+            on_expand_toggle(region.block_id, not region.expanded)
+            return
+          end
+        end
+      end
+
       -- In OSC 8 terminals, the terminal handles link clicks natively.
       -- Only use Neovim-level link handling as a fallback for non-OSC 8 terminals.
       if not M.supports_osc8() then
-        local click_line = mouse.line - 1
         local click_col = mouse.column - 1
         local extmarks =
           vim.api.nvim_buf_get_extmarks(buf, ns, { click_line, 0 }, { click_line + 1, 0 }, { details = true })
