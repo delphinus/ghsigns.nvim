@@ -385,6 +385,48 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Embeds", function()
+    it("should render note embed as link", function()
+      local text, highlights, links = markdown.render("![[my-note]]")
+      eq("📎 my-note", text)
+      eq(1, #links)
+      eq("obsidian://open?file=my-note", links[1].url)
+    end)
+
+    it("should render image embed with image icon", function()
+      local text = markdown.render("![[photo.png]]")
+      eq("🖼 photo.png", text)
+    end)
+
+    it("should render various image extensions", function()
+      for _, ext in ipairs { "jpg", "jpeg", "gif", "svg", "webp", "bmp" } do
+        local text = markdown.render("![[img." .. ext .. "]]")
+        assert.is_truthy(text:match "🖼", "Expected image icon for ." .. ext)
+      end
+    end)
+
+    it("should distinguish embed from standard image syntax", function()
+      local text1 = markdown.render("![[embed]]")
+      local text2 = markdown.render("![alt](url)")
+      assert.not_equals(text1, text2)
+    end)
+
+    it("should handle unclosed embed", function()
+      local text = markdown.render("![[unclosed")
+      eq("![[unclosed", text)
+    end)
+
+    it("should handle embed with heading reference", function()
+      local text = markdown.render("![[note#section]]")
+      eq("📎 note", text)
+    end)
+
+    it("should handle embed with pipe display text", function()
+      local text = markdown.render("![[note|custom display]]")
+      eq("📎 note", text)
+    end)
+  end)
+
   describe("Blockquote", function()
     it("should replace > prefix with visual bar", function()
       local text, highlights, links, special_type = markdown.render("> Quoted text")

@@ -205,6 +205,49 @@ local function process_wikilinks(text, highlights, links)
   return processed
 end
 
+local IMAGE_EXTENSIONS = { png = true, jpg = true, jpeg = true, gif = true, svg = true, webp = true, bmp = true }
+
+--- Process ![[embeds]]: display as icon + filename with highlight
+---@param text string
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string processed
+local function process_embeds(text, highlights, links)
+  local processed = ""
+  local i = 1
+
+  while i <= #text do
+    if text:sub(i, i + 2) == "![[" then
+      local close = text:find("]]", i + 3, true)
+      if close then
+        local inner = text:sub(i + 3, close - 1)
+        local target = inner:match "^([^|#]+)" or inner
+        local ext = target:match "%.(%w+)$"
+        local icon = (ext and IMAGE_EXTENSIONS[ext:lower()]) and "🖼 " or "📎 "
+        local display = icon .. target
+
+        local start_col = #processed
+        processed = processed .. display
+        table.insert(highlights, { col = start_col, end_col = start_col + #display, hl = "Underlined" })
+        table.insert(links, {
+          col_start = start_col,
+          col_end = start_col + #display,
+          url = "obsidian://open?file=" .. target,
+        })
+        i = close + 2
+      else
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+
+  return processed
+end
+
 --- Process [text](url) links: remove markers and produce highlight/link entries
 ---@param text string
 ---@param highlights Ghsigns.Markdown.Highlight[]
@@ -490,7 +533,8 @@ Markdown.render = function(text, repo_base_url, autolinks)
   -- Remove Obsidian inline comments (%%...%%)
   rendered_text = rendered_text:gsub("%%%%(.-)%%%%", "")
 
-  -- Process inline elements (wikilinks before standard links)
+  -- Process inline elements (embeds and wikilinks before standard links)
+  rendered_text = process_embeds(rendered_text, highlights, links)
   rendered_text = process_wikilinks(rendered_text, highlights, links)
   rendered_text = process_links(rendered_text, highlights, links)
   rendered_text = process_bare_urls(rendered_text, MAX_URL_DISPLAY_WIDTH, highlights, links)
