@@ -85,14 +85,18 @@ MdPreview.build_content = function(lines, opts)
   end
 
   local fold_state = opts.fold_state or {}
+  local expand_state = opts.expand_state or {}
 
   local in_code_block = false
   local code_block_lang = nil
   local code_block_start = nil
   local code_source_lines = nil
+  local code_block_id = nil
+  local code_block_has_truncation = false
   local prev_was_heading = false
   local prev_was_blank = false
   local table_buf = {}
+  local table_buf_start_idx = nil
   local lines_shown = 0
   local current_alert_type = nil
   local skip_callout_body = false
@@ -101,13 +105,36 @@ MdPreview.build_content = function(lines, opts)
   local callout_code_start = nil
   local callout_code_prefix = nil
   local callout_code_source_lines = nil
+  local callout_code_block_id = nil
+  local callout_code_has_truncation = false
   local in_comment_block = false
 
   --- Flush accumulated table lines
   local function flush_table()
     if #table_buf > 0 then
-      b:add_table(table_buf, "  ", max_width)
+      local lines_before_tbl = #b.lines
+      local tbl_expanded = table_buf_start_idx and expand_state[table_buf_start_idx]
+      local effective_max = tbl_expanded and math.huge or max_width
+      b:add_table(table_buf, "  ", effective_max)
+      local has_truncation = false
+      if not tbl_expanded then
+        for li = lines_before_tbl + 1, #b.lines do
+          if b.lines[li] and b.lines[li]:match "…" then
+            has_truncation = true
+            break
+          end
+        end
+      end
+      if has_truncation or tbl_expanded then
+        table.insert(b.expandable_regions, {
+          start_line = lines_before_tbl,
+          end_line = #b.lines - 1,
+          block_id = table_buf_start_idx,
+          expanded = tbl_expanded or false,
+        })
+      end
       table_buf = {}
+      table_buf_start_idx = nil
     end
   end
 
@@ -138,6 +165,9 @@ MdPreview.build_content = function(lines, opts)
 
     -- Accumulate table lines
     if is_table_line then
+      if #table_buf == 0 then
+        table_buf_start_idx = i
+      end
       table.insert(table_buf, line)
       goto continue
     end
@@ -167,6 +197,8 @@ MdPreview.build_content = function(lines, opts)
         code_block_lang = line:match "^```(%S+)" or nil
         code_block_start = #b.lines
         code_source_lines = {}
+        code_block_id = i
+        code_block_has_truncation = false
       else
         if code_block_lang and code_block_start < #b.lines then
           table.insert(b.code_blocks, {
@@ -176,15 +208,25 @@ MdPreview.build_content = function(lines, opts)
             source_lines = code_source_lines,
           })
         end
+        if code_block_has_truncation or expand_state[code_block_id] then
+          table.insert(b.expandable_regions, {
+            start_line = code_block_start,
+            end_line = #b.lines - 1,
+            block_id = code_block_id,
+            expanded = expand_state[code_block_id] or false,
+          })
+        end
         in_code_block = false
         code_block_lang = nil
         code_source_lines = nil
+        code_block_id = nil
       end
     elseif in_code_block then
       table.insert(code_source_lines, line)
       local indented = "  " .. line
       local display_width = vim.fn.strdisplaywidth(indented)
-      if display_width > max_width then
+      if not expand_state[code_block_id] and display_width > max_width then
+        code_block_has_truncation = true
         local target = max_width - 1
         local current_width = 0
         local byte_pos = 0
@@ -196,7 +238,11 @@ MdPreview.build_content = function(lines, opts)
           current_width = current_width + char_width
           byte_pos = byte_pos + #char
         end
-        b:add_line(indented:sub(1, byte_pos) .. "…", { { col = 0, end_col = -1, hl = "String" } })
+        local truncated_line = indented:sub(1, byte_pos) .. "…"
+        b:add_line(truncated_line, {
+          { col = 0, end_col = byte_pos, hl = "String" },
+          { col = byte_pos, end_col = #truncated_line, hl = "Underlined" },
+        })
       else
         b:add_line(indented, { { col = 0, end_col = -1, hl = "String" } })
       end
@@ -213,6 +259,8 @@ MdPreview.build_content = function(lines, opts)
             callout_code_prefix = "  │ "
             callout_code_start = #b.lines
             callout_code_source_lines = {}
+            callout_code_block_id = i
+            callout_code_has_truncation = false
           else
             if callout_code_lang and callout_code_start < #b.lines then
               table.insert(b.code_blocks, {
@@ -223,16 +271,26 @@ MdPreview.build_content = function(lines, opts)
                 source_lines = callout_code_source_lines,
               })
             end
+            if callout_code_has_truncation or expand_state[callout_code_block_id] then
+              table.insert(b.expandable_regions, {
+                start_line = callout_code_start,
+                end_line = #b.lines - 1,
+                block_id = callout_code_block_id,
+                expanded = expand_state[callout_code_block_id] or false,
+              })
+            end
             in_callout_code_block = false
             callout_code_lang = nil
             callout_code_source_lines = nil
+            callout_code_block_id = nil
           end
           handled = true
         elseif in_callout_code_block then
           table.insert(callout_code_source_lines, stripped)
           local code_line = callout_code_prefix .. stripped
           local display_width = vim.fn.strdisplaywidth(code_line)
-          if display_width > max_width then
+          if not expand_state[callout_code_block_id] and display_width > max_width then
+            callout_code_has_truncation = true
             local target = max_width - 1
             local current_width = 0
             local byte_pos = 0
@@ -244,12 +302,18 @@ MdPreview.build_content = function(lines, opts)
               current_width = current_width + char_width
               byte_pos = byte_pos + #char
             end
-            code_line = code_line:sub(1, byte_pos) .. "…"
+            local truncated_code = code_line:sub(1, byte_pos) .. "…"
+            b:add_line(truncated_code, {
+              { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
+              { col = #callout_code_prefix, end_col = byte_pos, hl = "String" },
+              { col = byte_pos, end_col = #truncated_code, hl = "Underlined" },
+            })
+          else
+            b:add_line(code_line, {
+              { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
+              { col = #callout_code_prefix, end_col = -1, hl = "String" },
+            })
           end
-          b:add_line(code_line, {
-            { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
-            { col = #callout_code_prefix, end_col = -1, hl = "String" },
-          })
           b:apply_alert_styling(lines_before, #b.lines, current_alert_type, false)
           handled = true
         end
@@ -327,6 +391,7 @@ MdPreview.show = function(opts)
 
   local source_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local fold_state = {}
+  local expand_state = {}
   opts = opts or {}
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -343,11 +408,18 @@ MdPreview.show = function(opts)
 
   local function rebuild()
     opts.fold_state = fold_state
+    opts.expand_state = expand_state
     local new_content = MdPreview.build_content(source_lines, opts)
     vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
     vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
     display_utils.apply_content_to_buffer(buf, ns, new_content)
     vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+    -- Toggle wrap based on whether any block is expanded
+    local any_expanded = false
+    for _, v in pairs(expand_state) do
+      if v then any_expanded = true; break end
+    end
+    vim.api.nvim_set_option_value("wrap", not any_expanded, { win = win })
     content = new_content
   end
 
@@ -370,6 +442,10 @@ MdPreview.show = function(opts)
     end,
     on_fold_toggle = function(source_line, collapsed)
       fold_state[source_line] = collapsed
+      rebuild()
+    end,
+    on_expand_toggle = function(block_id, expanded)
+      expand_state[block_id] = expanded
       rebuild()
     end,
   })
