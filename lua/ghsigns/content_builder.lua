@@ -588,12 +588,13 @@ end
 ---@param max_width integer
 ---@param repo_base_url? string
 ---@param autolinks? Ghsigns.Autolink[]
+---@param ref_links? table<string, string>
 ---@return string? alert_type Alert type if this line is an alert header
 ---@return string? fold_mod Fold modifier ("+" or "-") if this is a foldable callout
-function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url, autolinks)
+function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url, autolinks, ref_links)
   local markdown = require "ghsigns.markdown"
   local rendered_text, md_highlights, md_links, special_type, list_marker, alert_type, fold_mod =
-    markdown.render(text, repo_base_url, autolinks)
+    markdown.render(text, repo_base_url, autolinks, ref_links)
 
   local quote_prefix = ""
   if special_type == "blockquote" then
@@ -726,6 +727,8 @@ function ContentBuilder:build_body(p, opts)
   self:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
 
   local cleaned_lines = normalize_body(p.body)
+  local markdown = require "ghsigns.markdown"
+  local ref_links = markdown.parse_reference_links(cleaned_lines)
   local in_code_block = false
   local code_block_lang = nil
   local code_block_start = nil
@@ -750,6 +753,7 @@ function ContentBuilder:build_body(p, opts)
   local callout_code_block_id = nil
   local callout_code_has_truncation = false
   local in_comment_block = false
+  local skip_next_line = false
 
   --- Flush accumulated table lines
   local function flush_table()
@@ -784,6 +788,31 @@ function ContentBuilder:build_body(p, opts)
   end
 
   for src_idx, body_line in ipairs(cleaned_lines) do
+    -- Skip setext heading underline
+    if skip_next_line then
+      skip_next_line = false
+      goto continue
+    end
+
+    -- Skip reference link definition lines
+    if not in_code_block and markdown.is_reference_link_def(body_line) then
+      goto continue
+    end
+
+    -- Detect setext heading: current non-blank line followed by === or ---
+    if not in_code_block and not body_line:match "^%s*$" and not body_line:match "^[#>%-%*`|%d]" then
+      local next_line = cleaned_lines[src_idx + 1]
+      if next_line then
+        if next_line:match "^=+%s*$" then
+          body_line = "# " .. body_line
+          skip_next_line = true
+        elseif next_line:match "^%-+%s*$" then
+          body_line = "## " .. body_line
+          skip_next_line = true
+        end
+      end
+    end
+
     local is_blank = body_line:match "^%s*$" ~= nil
     local is_heading = (not in_code_block) and body_line:match "^#+%s+" ~= nil
     local is_table_line = (not in_code_block) and body_line:match "^%s*|" ~= nil
@@ -832,7 +861,14 @@ function ContentBuilder:build_body(p, opts)
       if not skip then
         for k = src_idx + 1, #cleaned_lines do
           if not cleaned_lines[k]:match "^%s*$" then
+            -- Check ATX heading or setext heading (text followed by === or ---)
             skip = cleaned_lines[k]:match "^#+%s+" ~= nil
+            if not skip and not cleaned_lines[k]:match "^[#>%-%*`|%d]" then
+              local kk = cleaned_lines[k + 1]
+              if kk and (kk:match "^=+%s*$" or kk:match "^%-+%s*$") then
+                skip = true
+              end
+            end
             break
           end
         end
@@ -991,7 +1027,7 @@ function ContentBuilder:build_body(p, opts)
           callout_code_lang = nil
         end
 
-        local alert_type, fold_mod = self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks)
+        local alert_type, fold_mod = self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks, ref_links)
         local lines_after = #self.lines
         if alert_type then
           current_alert_type = alert_type

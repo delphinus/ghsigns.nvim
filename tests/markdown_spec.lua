@@ -601,6 +601,95 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Image links", function()
+    it("should handle [![alt](img-url)](link-url) as link with alt text", function()
+      local text, highlights, links = markdown.render(
+        "[![Coverity](https://scan.coverity.com/badge.svg)](https://scan.coverity.com/projects/2227)"
+      )
+      eq("Coverity", text)
+      eq(1, #highlights)
+      eq({ col = 0, end_col = 8, hl = "Underlined" }, highlights[1])
+      eq(1, #links)
+      eq("https://scan.coverity.com/projects/2227", links[1].url)
+    end)
+
+    it("should handle multiple image links on one line", function()
+      local text, highlights, links = markdown.render(
+        "[![A](a.svg)](https://a.com) [![B](b.svg)](https://b.com)"
+      )
+      eq("A B", text)
+      eq(2, #links)
+      eq("https://a.com", links[1].url)
+      eq("https://b.com", links[2].url)
+    end)
+  end)
+
+  describe("Reference links", function()
+    local ref_links = {
+      ["advanced uis"] = "https://github.com/neovim/neovim/wiki/Related-projects#gui",
+      ["nvim-features"] = "https://neovim.io/doc/user/vim_diff.html#nvim-features",
+      ["roadmap"] = "https://neovim.io/roadmap/",
+    }
+
+    it("should resolve [text] shortcut reference links", function()
+      local text, highlights, links = markdown.render("[advanced UIs]", nil, nil, ref_links)
+      eq("advanced UIs", text)
+      eq(1, #highlights)
+      eq({ col = 0, end_col = 12, hl = "Underlined" }, highlights[1])
+      eq(1, #links)
+      eq("https://github.com/neovim/neovim/wiki/Related-projects#gui", links[1].url)
+    end)
+
+    it("should resolve [text][ref] reference links", function()
+      local text, highlights, links = markdown.render("[`:help nvim-features`][nvim-features]", nil, nil, ref_links)
+      -- After reference link resolution, backticks remain; then code marker processing removes them
+      eq(":help nvim-features", text)
+      eq(1, #links)
+      eq("https://neovim.io/doc/user/vim_diff.html#nvim-features", links[1].url)
+    end)
+
+    it("should handle mixed inline and reference links", function()
+      local text, highlights, links = markdown.render(
+        "See [docs](https://example.com) and [Roadmap]", nil, nil, ref_links
+      )
+      eq("See docs and Roadmap", text)
+      eq(2, #links)
+      eq("https://example.com", links[1].url)
+      eq("https://neovim.io/roadmap/", links[2].url)
+    end)
+
+    it("should not resolve unknown reference labels", function()
+      local text = markdown.render("[unknown ref]", nil, nil, ref_links)
+      eq("[unknown ref]", text)
+    end)
+
+    it("should work without ref_links parameter", function()
+      local text = markdown.render("[some text]")
+      eq("[some text]", text)
+    end)
+  end)
+
+  describe("parse_reference_links", function()
+    it("should parse reference link definitions", function()
+      local refs = markdown.parse_reference_links({
+        "Some text",
+        "[nvim-features]: https://neovim.io/doc/user/vim_diff.html#nvim-features",
+        "[Roadmap]: https://neovim.io/roadmap/",
+        "[advanced UIs]: https://github.com/neovim/neovim/wiki/Related-projects#gui",
+      })
+      eq("https://neovim.io/doc/user/vim_diff.html#nvim-features", refs["nvim-features"])
+      eq("https://neovim.io/roadmap/", refs["roadmap"])
+      eq("https://github.com/neovim/neovim/wiki/Related-projects#gui", refs["advanced uis"])
+    end)
+
+    it("should handle angle-bracket URLs", function()
+      local refs = markdown.parse_reference_links({
+        "[example]: <https://example.com>",
+      })
+      eq("https://example.com", refs["example"])
+    end)
+  end)
+
   describe("Combined markdown", function()
     it("should handle links and bold together", function()
       local text = markdown.render("**Important**: See [docs](https://example.com)")
