@@ -826,14 +826,24 @@ function ContentBuilder:build_body(p, opts)
       end
     end
 
-    -- Skip blank lines immediately after headings (outside code blocks)
-    if not in_code_block and is_blank and prev_was_heading then
-      prev_was_blank = true
-      goto continue
+    -- Skip blank lines adjacent to headings (outside code blocks)
+    if not in_code_block and is_blank then
+      local skip = prev_was_heading
+      if not skip then
+        for k = src_idx + 1, #cleaned_lines do
+          if not cleaned_lines[k]:match "^%s*$" then
+            skip = cleaned_lines[k]:match "^#+%s+" ~= nil
+            break
+          end
+        end
+      end
+      if skip then
+        goto continue
+      end
     end
 
-    -- Auto-insert blank line before headings if not already preceded by one
-    if not in_code_block and is_heading and lines_shown > 0 and not prev_was_blank then
+    -- Ensure exactly one blank line before headings (except the first content)
+    if not in_code_block and is_heading and lines_shown > 0 then
       self:add_line "  "
       lines_shown = lines_shown + 1
       if lines_shown >= max_lines then

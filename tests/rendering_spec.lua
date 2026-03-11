@@ -308,12 +308,12 @@ describe("PR content rendering", function()
       eq("  Hello world", c.lines[7])
     end)
 
-    it("should render headings with Title highlight", function()
+    it("should render headings with level-specific icon and highlight", function()
       local c = build_with_body "## Section Title"
-      eq("  Section Title", c.lines[7])
-      eq({
-        { col = 2, end_col = 15, hl = "Title" },
-      }, hl_for_line(c, 6))
+      eq("  ○ Section Title", c.lines[7])
+      local hls = hl_for_line(c, 6)
+      eq("GhsignsH2", hls[1].hl)
+      eq("GhsignsH2", hls[2].hl)
     end)
 
     it("should render **bold** with Bold highlight", function()
@@ -929,14 +929,14 @@ All 21 tests pass:
         "Merged: " .. format_local_time("2026-02-21T01:58:30Z"),
         "",
         "Description:",
-        "  Summary",
+        "  ○ Summary",
         "  This PR adds two enhancements to ghsigns.nvim:",
         "  ",
         "  - Add strikethrough rendering support to the markdown module",
         "  - Introduce cache utility methods (clear, invalidate, size) for better cache",
         "    lifecycle management",
         "  ",
-        "  Motivation",
+        "  ○ Motivation",
         "  │ Currently, the markdown renderer handles bold, inline code, links, and",
         "  │ headings — but it does not support strikethrough. GitHub-flavored Markdown",
         "  │ uses text extensively in PR descriptions, so this is a useful addition.",
@@ -946,8 +946,9 @@ All 21 tests pass:
         "  │ 2. Invalidate a specific entry",
         "  │ 3. Query how many entries are cached",
         "  ",
-        "  Changes",
-        "  1. Markdown: Strikethrough support",
+        "  ○ Changes",
+        "  ",
+        "  ◆ 1. Markdown: Strikethrough support",
         "  Added text parsing in lua/ghsigns/markdown.lua:",
         "  ",
         '  -- Strikethrough ~~text~~ - remove markers',
@@ -964,14 +965,14 @@ All 21 tests pass:
         "  │ Strikethrough │ text   │ text        │ DiagnosticDeprecated │",
         "  │ Link          │ text   │ text        │ Underlined           │",
         "  ",
-        "  2. Cache: Management methods",
+        "  ◆ 2. Cache: Management methods",
         "  Three new methods added to lua/ghsigns/cache.lua:",
         "  ",
         "  - Cache:clear() — Wipe all cached PR data",
         "  - Cache:invalidate(git_info) — Remove a *specific* entry",
         "  - Cache:size() — Return the number of cached entries",
         "  ",
-        "  3. Tests",
+        "  ◆ 3. Tests",
         "  New test cases in tests/markdown_spec.lua:",
         "  ",
         "  - [x] Single strikethrough segment: removed",
@@ -979,7 +980,7 @@ All 21 tests pass:
         "  - [x] Correct highlight group assignment (DiagnosticDeprecated)",
         "  - [x] Correct text extraction after marker removal",
         "  ",
-        "  How to test",
+        "  ○ How to test",
         "  # Run all tests",
         "  make test",
         "  ",
@@ -1006,7 +1007,7 @@ All 21 tests pass:
         "  │ typically renders as strikethrough text, which makes it a natural fit for",
         "  │ text.",
         "  ",
-        "  Related",
+        "  ○ Related",
         "  - Closes #0 *(demo — no real issue)*",
         "  - See also: GitHub Flavored Markdown Spec — Strikethrough",
         "  ",
@@ -1059,12 +1060,15 @@ All 21 tests pass:
     end)
 
     it("should have correct body highlights", function()
-      -- "Summary" heading
-      eq({ { col = 2, end_col = 9, hl = "Title" } }, hl_for_line(pr4_content, 12))
+      -- "Summary" heading (○ = 3 bytes + space = 4 bytes prefix)
+      local summary_hls = hl_for_line(pr4_content, 12)
+      eq("GhsignsH2", summary_hls[1].hl)
+      eq("GhsignsH2", summary_hls[2].hl)
       -- Bold "ghsigns.nvim" in line 13
       eq({ { col = 35, end_col = 47, hl = "Bold" } }, hl_for_line(pr4_content, 13))
       -- "Motivation" heading
-      eq({ { col = 2, end_col = 12, hl = "Title" } }, hl_for_line(pr4_content, 19))
+      local motivation_hls = hl_for_line(pr4_content, 19)
+      eq("GhsignsH2", motivation_hls[1].hl)
       -- Blockquote on line 20 (first wrapped blockquote line)
       local bq_hl = hl_for_line(pr4_content, 20)
       assert.is_not_nil(bq_hl)
@@ -1079,7 +1083,7 @@ All 21 tests pass:
 
     it("should have correct meta values", function()
       eq(0, pr4_content.title_line)
-      eq(96, pr4_content.close_line_idx)
+      eq(97, pr4_content.close_line_idx)
       eq("#4 feat: add strikethrough support and cache management", pr4_content.title_text)
     end)
   end)
@@ -1279,7 +1283,7 @@ All 21 tests pass:
   describe("Heading blank line control", function()
     it("should skip blank lines after headings", function()
       local c = build_with_body "## Title\n\nContent"
-      eq("  Title", c.lines[7])
+      eq("  ○ Title", c.lines[7])
       eq("  Content", c.lines[8])
     end)
 
@@ -1287,14 +1291,24 @@ All 21 tests pass:
       local c = build_with_body "Paragraph\n## Title"
       eq("  Paragraph", c.lines[7])
       eq("  ", c.lines[8])
-      eq("  Title", c.lines[9])
+      eq("  ○ Title", c.lines[9])
     end)
 
     it("should not insert extra blank line before headings when already preceded by one", function()
       local c = build_with_body "Paragraph\n\n## Title"
       eq("  Paragraph", c.lines[7])
       eq("  ", c.lines[8])
-      eq("  Title", c.lines[9])
+      eq("  ○ Title", c.lines[9])
+    end)
+
+    it("should insert blank lines between consecutive headings with blank lines in source", function()
+      local c = build_with_body "# hoge1\n\n## hoge2\n\n### hoge3\ncontent"
+      eq("  ◉ hoge1", c.lines[7])
+      eq("  ", c.lines[8])
+      eq("  ○ hoge2", c.lines[9])
+      eq("  ", c.lines[10])
+      eq("  ◆ hoge3", c.lines[11])
+      eq("  content", c.lines[12])
     end)
   end)
 
