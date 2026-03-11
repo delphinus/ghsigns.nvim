@@ -408,6 +408,7 @@ Markdown.render = function(text, repo_base_url, autolinks)
   end
   rendered_text = process_paired_markers(rendered_text, "%*%*([^*]+)%*%*", "Bold", 2, highlights, links)
   rendered_text = process_paired_markers(rendered_text, "~~([^~]+)~~", "DiagnosticDeprecated", 2, highlights, links)
+  rendered_text = process_paired_markers(rendered_text, "==([^=]+)==", "GhsignsHighlight", 2, highlights, links)
   rendered_text = process_code_markers(rendered_text, "String", highlights, links)
 
   -- Add list marker highlight

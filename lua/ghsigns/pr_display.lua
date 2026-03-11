@@ -60,6 +60,9 @@ PrDisplay.show_pr_info = function(pr, opts)
   title_hl.underline = true
   vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
 
+  -- Obsidian ==highlight== marker
+  vim.api.nvim_set_hl(0, "GhsignsHighlight", { bg = "#3b3600", fg = "#ffec80", default = true })
+
   -- Create alert highlight groups
   local normal_hl = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
   if not normal_hl.bg then
