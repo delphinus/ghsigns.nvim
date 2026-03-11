@@ -10,48 +10,21 @@ local Gh = {}
 
 ---@class Ghsigns.Pr
 ---@field additions integer
----@field assignees table
 ---@field author table
----@field autoMergeRequest? boolean
 ---@field baseRefName string
----@field baseRefOid string
 ---@field body string
 ---@field changedFiles integer
----@field closed boolean
----@field closedAt? string
----@field closingIssuesReferences table
----@field comments table
 ---@field commits table
 ---@field createdAt string
 ---@field deletions integer
----@field files table
----@field fullDatabaseId string
 ---@field headRefName string
----@field headRefOid string
----@field headRepository table
----@field headRepositoryOwner table
----@field id string
----@field isCrossRepository boolean
 ---@field isDraft boolean
 ---@field labels table
----@field latestReviews table
----@field maintainerCanModify boolean
----@field mergeCommit? string
----@field mergeStateStatus string
 ---@field mergeable string
 ---@field mergedAt? string
----@field mergedBy? string
----@field milestone? string
 ---@field number integer
----@field potentialMergeCommit? string
----@field projectCards? string
----@field projectItems table
----@field reactionGroups table
 ---@field reviewDecision string
----@field reviewRequests table
----@field reviews table
 ---@field state string
----@field statusCheckRollup table
 ---@field title string
 ---@field updatedAt string
 ---@field url string
@@ -63,48 +36,21 @@ Gh.new = function(bin)
     bin = bin or "gh",
     fields = table.concat({
       "additions",
-      "assignees",
       "author",
-      "autoMergeRequest",
       "baseRefName",
-      "baseRefOid",
       "body",
       "changedFiles",
-      "closed",
-      "closedAt",
-      "closingIssuesReferences",
-      "comments",
       "commits",
       "createdAt",
       "deletions",
-      "files",
-      "fullDatabaseId",
       "headRefName",
-      "headRefOid",
-      "headRepository",
-      "headRepositoryOwner",
-      "id",
-      "isCrossRepository",
       "isDraft",
       "labels",
-      "latestReviews",
-      "maintainerCanModify",
-      "mergeCommit",
-      "mergeStateStatus",
       "mergeable",
       "mergedAt",
-      "mergedBy",
-      "milestone",
       "number",
-      "potentialMergeCommit",
-      "projectCards",
-      "projectItems",
-      "reactionGroups",
       "reviewDecision",
-      "reviewRequests",
-      "reviews",
       "state",
-      "statusCheckRollup",
       "title",
       "updatedAt",
       "url",
