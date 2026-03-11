@@ -332,4 +332,46 @@ describe("Markdown Preview content rendering", function()
       assert.is_true(found_quote, "Expected blockquote")
     end)
   end)
+
+  describe("Block comments", function()
+    it("should skip block comment lines", function()
+      local c = md_preview.build_content {
+        "visible line",
+        "%%",
+        "hidden line 1",
+        "hidden line 2",
+        "%%",
+        "visible again",
+      }
+      local all_text = table.concat(c.lines, "\n")
+      assert.is_truthy(all_text:match "visible line")
+      assert.is_truthy(all_text:match "visible again")
+      assert.is_falsy(all_text:match "hidden line")
+    end)
+
+    it("should hide everything after unclosed block comment", function()
+      local c = md_preview.build_content {
+        "visible line",
+        "%%",
+        "hidden to the end",
+      }
+      local all_text = table.concat(c.lines, "\n")
+      assert.is_truthy(all_text:match "visible line")
+      assert.is_falsy(all_text:match "hidden to the end")
+    end)
+
+    it("should not treat %% inside code blocks as comments", function()
+      local c = md_preview.build_content {
+        "```",
+        "%%",
+        "code line",
+        "%%",
+        "```",
+        "visible after code",
+      }
+      local all_text = table.concat(c.lines, "\n")
+      assert.is_truthy(all_text:match "code line")
+      assert.is_truthy(all_text:match "visible after code")
+    end)
+  end)
 end)
