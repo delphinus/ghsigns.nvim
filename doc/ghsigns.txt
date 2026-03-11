@@ -319,6 +319,29 @@ The following highlight groups are defined by the plugin:
     *GhsignsAlertCautionBg*
         Background for `[!CAUTION]` alerts.  10% blend with Normal bg.
 
+    *GhsignsAlertAbstract* *GhsignsAlertAbstractBg*
+        For `[!ABSTRACT]`, `[!SUMMARY]`, `[!TLDR]`.  fg from DiagnosticHint.
+    *GhsignsAlertTodo* *GhsignsAlertTodoBg*
+        For `[!TODO]`.  fg from DiagnosticInfo.
+    *GhsignsAlertSuccess* *GhsignsAlertSuccessBg*
+        For `[!SUCCESS]`, `[!CHECK]`, `[!DONE]`.  fg from DiagnosticOk.
+    *GhsignsAlertQuestion* *GhsignsAlertQuestionBg*
+        For `[!QUESTION]`, `[!HELP]`, `[!FAQ]`.  fg from DiagnosticWarn.
+    *GhsignsAlertFailure* *GhsignsAlertFailureBg*
+        For `[!FAILURE]`, `[!FAIL]`, `[!MISSING]`.  fg from DiagnosticError.
+    *GhsignsAlertDanger* *GhsignsAlertDangerBg*
+        For `[!DANGER]`, `[!ERROR]`.  fg from DiagnosticError.
+    *GhsignsAlertBug* *GhsignsAlertBugBg*
+        For `[!BUG]`.  fg from DiagnosticError.
+    *GhsignsAlertExample* *GhsignsAlertExampleBg*
+        For `[!EXAMPLE]`.  fg from Special.
+    *GhsignsAlertQuote* *GhsignsAlertQuoteBg*
+        For `[!QUOTE]`, `[!CITE]`.  fg from Comment.
+
+    *GhsignsHighlight*
+        Obsidian `==highlight==` marker.  Yellow text on dark yellow bg.
+        Uses `default = true` so users can override with their colorscheme.
+
 The following standard highlight groups are used in the floating window:
 
     Group                   Usage ~
@@ -352,7 +375,9 @@ To visually verify all Markdown rendering features, run: >vim
 This opens a floating window with a dummy PR containing all supported
 Markdown notations:  headings, bold, inline code, links, strikethrough,
 issue references, unordered and ordered lists, blockquotes (including
-nested), GitHub alerts (NOTE, TIP, IMPORTANT, WARNING, CAUTION), code
+nested), GitHub alerts (NOTE, TIP, IMPORTANT, WARNING, CAUTION), Obsidian
+callouts (ABSTRACT, TODO, SUCCESS, QUESTION, FAILURE, DANGER, BUG, EXAMPLE,
+QUOTE), `==highlight==` markers, `[[wikilinks]]`, `![[embeds]]`, code
 blocks with and without language specification, and combined inline
 formatting.
 

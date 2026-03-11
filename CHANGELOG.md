@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.12.0] - 2026-03-11
+
+### Added
+
+- **Obsidian compatibility**: extended Markdown rendering with Obsidian-specific syntax support
+  - `==highlight==` marker syntax with `GhsignsHighlight` highlight group
+  - `%%comment%%` inline comments (hidden in preview) and `%%` block comments
+  - YAML frontmatter rendered as a "Properties" section in Markdown Preview
+  - 20+ Obsidian callout types (abstract, todo, success, question, failure, danger, bug, example, quote) with aliases
+  - Custom callout titles (`> [!NOTE] Custom Title`) and case-insensitive type matching
+  - `[[wikilink]]` syntax with display text, heading references, and `obsidian://` URI links
+  - `![[embed]]` syntax displayed as link icons (📎 for notes, 🖼 for images)
+- 18 new highlight groups for Obsidian callout types (`GhsignsAlert{Type}` and `GhsignsAlert{Type}Bg`)
+
 ## [1.11.0] - 2026-03-04
 
 ### Added
