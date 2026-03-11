@@ -57,6 +57,9 @@ MdPreview.build_content = function(lines, opts)
   opts = opts or {}
   local max_width = opts.max_width or 80
 
+  local markdown = require "ghsigns.markdown"
+  local ref_links = markdown.parse_reference_links(lines)
+
   local b = ContentBuilder.new()
 
   -- Detect and extract frontmatter
@@ -131,6 +134,7 @@ MdPreview.build_content = function(lines, opts)
   local callout_code_block_id = nil
   local callout_code_has_truncation = false
   local in_comment_block = false
+  local skip_next_line = false
 
   --- Flush accumulated table lines
   local function flush_table()
@@ -162,7 +166,33 @@ MdPreview.build_content = function(lines, opts)
   end
 
   for i = body_start, #lines do
+    -- Skip setext heading underline
+    if skip_next_line then
+      skip_next_line = false
+      goto continue
+    end
+
     local line = lines[i]
+
+    -- Skip reference link definition lines (outside code blocks)
+    if not in_code_block and markdown.is_reference_link_def(line) then
+      goto continue
+    end
+
+    -- Detect setext heading: current non-blank line followed by === or ---
+    if not in_code_block and not line:match "^%s*$" and not line:match "^[#>%-%*`|%d]" then
+      local next_line = lines[i + 1]
+      if next_line then
+        if next_line:match "^=+%s*$" then
+          line = "# " .. line
+          skip_next_line = true
+        elseif next_line:match "^%-+%s*$" then
+          line = "## " .. line
+          skip_next_line = true
+        end
+      end
+    end
+
     local is_blank = line:match "^%s*$" ~= nil
     local is_heading = (not in_code_block) and line:match "^#+%s+" ~= nil
     local is_table_line = (not in_code_block) and line:match "^%s*|" ~= nil
@@ -206,7 +236,14 @@ MdPreview.build_content = function(lines, opts)
       if not skip then
         for k = i + 1, #lines do
           if not lines[k]:match "^%s*$" then
+            -- Check ATX heading or setext heading (text followed by === or ---)
             skip = lines[k]:match "^#+%s+" ~= nil
+            if not skip and not lines[k]:match "^[#>%-%*`|%d]" then
+              local kk = lines[k + 1]
+              if kk and (kk:match "^=+%s*$" or kk:match "^%-+%s*$") then
+                skip = true
+              end
+            end
             break
           end
         end
@@ -359,7 +396,7 @@ MdPreview.build_content = function(lines, opts)
           callout_code_lang = nil
         end
 
-        local alert_type, fold_mod = b:add_markdown_line(line, "  ", max_width)
+        local alert_type, fold_mod = b:add_markdown_line(line, "  ", max_width, nil, nil, ref_links)
         local lines_after = #b.lines
         if alert_type then
           current_alert_type = alert_type

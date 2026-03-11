@@ -113,6 +113,75 @@ describe("Markdown Preview content rendering", function()
     end)
   end)
 
+  describe("Setext headings", function()
+    it("should render setext h1 with === underline", function()
+      local c = md_preview.build_content {
+        "Top Level",
+        "=========",
+      }
+      eq("  ◉ Top Level", c.lines[1])
+      eq(1, #c.lines)
+      local hls = hl_for_line(c, 0)
+      eq("GhsignsH1", hls[1].hl)
+    end)
+
+    it("should render setext h2 with --- underline", function()
+      local c = md_preview.build_content {
+        "License",
+        "-------",
+      }
+      eq("  ○ License", c.lines[1])
+      eq(1, #c.lines)
+      local hls = hl_for_line(c, 0)
+      eq("GhsignsH2", hls[1].hl)
+    end)
+
+    it("should handle setext headings with surrounding content", function()
+      local c = md_preview.build_content {
+        "Some text",
+        "",
+        "Features",
+        "--------",
+        "",
+        "More text",
+      }
+      -- Blank lines adjacent to headings are skipped, but one is auto-inserted before
+      eq("  Some text", c.lines[1])
+      eq("  ", c.lines[2]) -- auto-inserted blank before heading
+      eq("  ○ Features", c.lines[3])
+      -- Blank line after heading is skipped
+      eq("  More text", c.lines[4])
+      eq(4, #c.lines)
+    end)
+  end)
+
+  describe("Reference links", function()
+    it("should resolve reference links and hide definitions", function()
+      local c = md_preview.build_content {
+        "See [advanced UIs] for details.",
+        "",
+        "[advanced UIs]: https://example.com/gui",
+      }
+      -- Reference link definition should be hidden
+      eq(2, #c.lines) -- text + blank line (no definition line)
+      assert.is_truthy(c.lines[1]:match "advanced UIs")
+      -- Should have link metadata
+      eq(1, #c.link_metadata)
+      eq("https://example.com/gui", c.link_metadata[1].url)
+    end)
+
+    it("should resolve [text][ref] reference links", function()
+      local c = md_preview.build_content {
+        "See [help][my-ref] here.",
+        "",
+        "[my-ref]: https://example.com",
+      }
+      assert.is_truthy(c.lines[1]:match "help")
+      eq(1, #c.link_metadata)
+      eq("https://example.com", c.link_metadata[1].url)
+    end)
+  end)
+
   ---------------------------------------------------------------------------
   -- Group 2: Bold text
   ---------------------------------------------------------------------------

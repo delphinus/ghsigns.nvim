@@ -249,6 +249,7 @@ local function process_embeds(text, highlights, links)
 end
 
 --- Process [text](url) links: remove markers and produce highlight/link entries
+--- Supports balanced brackets for image-in-link patterns like [![alt](img)](url)
 ---@param text string
 ---@param highlights Ghsigns.Markdown.Highlight[]
 ---@param links Ghsigns.Markdown.Link[]
@@ -257,15 +258,111 @@ local function process_links(text, highlights, links)
   local processed = ""
   local i = 1
   while i <= #text do
-    local s, e = text:find("%[([^%]]+)%]%([^%)]+%)", i)
-    if s == i then
-      local link_text = text:match("%[([^%]]+)%]%([^%)]+%)", i)
-      local url = text:match("%[[^%]]+%]%(([^%)]+)%)", i)
-      local start_col = #processed
-      processed = processed .. link_text
-      table.insert(highlights, { col = start_col, end_col = start_col + #link_text, hl = "Underlined" })
-      table.insert(links, { col_start = start_col, col_end = start_col + #link_text, url = url })
-      i = e + 1
+    if text:sub(i, i) == "[" then
+      -- Find matching ] with balanced bracket counting
+      local depth = 1
+      local j = i + 1
+      while j <= #text and depth > 0 do
+        local c = text:sub(j, j)
+        if c == "[" then
+          depth = depth + 1
+        elseif c == "]" then
+          depth = depth - 1
+        end
+        j = j + 1
+      end
+      -- j is now one past the matching ]
+      if depth == 0 and j <= #text and text:sub(j, j) == "(" then
+        local paren_end = text:find(")", j + 1, true)
+        if paren_end then
+          local link_text_raw = text:sub(i + 1, j - 2)
+          local url = text:sub(j + 1, paren_end - 1)
+
+          -- If link text is an image ![alt](img-url), use alt as display
+          local alt = link_text_raw:match "^!%[(.-)%]%((.-)%)$"
+          local display_text = alt or link_text_raw
+
+          local start_col = #processed
+          processed = processed .. display_text
+          table.insert(highlights, { col = start_col, end_col = start_col + #display_text, hl = "Underlined" })
+          table.insert(links, { col_start = start_col, col_end = start_col + #display_text, url = url })
+          i = paren_end + 1
+        else
+          processed = processed .. text:sub(i, i)
+          i = i + 1
+        end
+      else
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+  return processed
+end
+
+--- Process reference-style links: [text][ref] and [text] shortcut forms
+---@param text string
+---@param ref_links table<string, string> lowercase label -> URL mapping
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string processed
+local function process_reference_links(text, ref_links, highlights, links)
+  if not ref_links or not next(ref_links) then
+    return text
+  end
+  local processed = ""
+  local i = 1
+  while i <= #text do
+    if text:sub(i, i) == "[" then
+      local close = text:find("]", i + 1, true)
+      if close then
+        local label = text:sub(i + 1, close - 1)
+        -- Check for [text][ref] form
+        if close + 1 <= #text and text:sub(close + 1, close + 1) == "[" then
+          local close2 = text:find("]", close + 2, true)
+          if close2 then
+            local ref = text:sub(close + 2, close2 - 1)
+            local url = ref_links[ref:lower()]
+            if url then
+              local start_col = #processed
+              processed = processed .. label
+              table.insert(highlights, { col = start_col, end_col = start_col + #label, hl = "Underlined" })
+              table.insert(links, { col_start = start_col, col_end = start_col + #label, url = url })
+              i = close2 + 1
+            else
+              processed = processed .. text:sub(i, i)
+              i = i + 1
+            end
+          else
+            processed = processed .. text:sub(i, i)
+            i = i + 1
+          end
+        else
+          -- Check for [text] shortcut form (not followed by '(')
+          if close + 1 > #text or text:sub(close + 1, close + 1) ~= "(" then
+            local url = ref_links[label:lower()]
+            if url then
+              local start_col = #processed
+              processed = processed .. label
+              table.insert(highlights, { col = start_col, end_col = start_col + #label, hl = "Underlined" })
+              table.insert(links, { col_start = start_col, col_end = start_col + #label, url = url })
+              i = close + 1
+            else
+              processed = processed .. text:sub(i, i)
+              i = i + 1
+            end
+          else
+            processed = processed .. text:sub(i, i)
+            i = i + 1
+          end
+        end
+      else
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
     else
       processed = processed .. text:sub(i, i)
       i = i + 1
@@ -473,13 +570,14 @@ end
 ---@param text string The markdown text to render
 ---@param repo_base_url? string Optional repository base URL for issue/PR references
 ---@param autolinks? Ghsigns.Autolink[] Optional autolink definitions
+---@param ref_links? table<string, string> Optional reference link definitions (lowercase label -> URL)
 ---@return string rendered_text The rendered plain text
 ---@return Ghsigns.Markdown.Highlight[] highlights
 ---@return Ghsigns.Markdown.Link[] links
 ---@return string? special_type Special type like "heading" if applicable
 ---@return string? list_marker List marker if applicable
 ---@return string? alert_type Alert type (NOTE, TIP, etc.) if applicable
-Markdown.render = function(text, repo_base_url, autolinks)
+Markdown.render = function(text, repo_base_url, autolinks, ref_links)
   local rendered_text = text:gsub("\r", "")
   -- Collapse multiple consecutive spaces (preserve leading whitespace)
   local leading_ws = rendered_text:match "^(%s*)" or ""
@@ -562,6 +660,7 @@ Markdown.render = function(text, repo_base_url, autolinks)
   rendered_text = process_embeds(rendered_text, highlights, links)
   rendered_text = process_wikilinks(rendered_text, highlights, links)
   rendered_text = process_links(rendered_text, highlights, links)
+  rendered_text = process_reference_links(rendered_text, ref_links, highlights, links)
   rendered_text = process_bare_urls(rendered_text, MAX_URL_DISPLAY_WIDTH, highlights, links)
   if repo_base_url then
     rendered_text = process_issue_refs(rendered_text, repo_base_url, highlights, links)
@@ -586,6 +685,29 @@ Markdown.render = function(text, repo_base_url, autolinks)
   end
 
   return rendered_text, highlights, links, nil, list_marker
+end
+
+--- Parse reference link definitions from document lines
+--- Extracts lines like [label]: url and returns a mapping from lowercase label to URL
+---@param lines string[]
+---@return table<string, string> ref_links mapping from lowercase label to URL
+Markdown.parse_reference_links = function(lines)
+  local refs = {}
+  for _, line in ipairs(lines) do
+    local label, rest = line:match "^%[([^%]]+)%]:%s+(.+)$"
+    if label then
+      local url = rest:match "^<(.+)>" or rest:match "^(%S+)" or rest
+      refs[label:lower()] = url
+    end
+  end
+  return refs
+end
+
+--- Check if a line is a reference link definition
+---@param line string
+---@return boolean
+Markdown.is_reference_link_def = function(line)
+  return line:match "^%[([^%]]+)%]:%s+" ~= nil
 end
 
 return Markdown
