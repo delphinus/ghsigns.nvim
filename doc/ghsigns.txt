@@ -179,6 +179,26 @@ GitHub Alerts: ~
     line, and a tinted background (10% blend of the type color with the
     Normal background).
 
+    Unknown callout types (e.g. `[!terminal]`, `[!file]`) are rendered
+    with a generic ❝ icon and NOTE styling.
+
+Foldable callouts: ~
+
+    Obsidian-style foldable callouts are supported with `+` and `-`
+    modifiers after the type:
+
+    `> [!NOTE]+ Title`   Expanded by default (click to collapse)
+    `> [!NOTE]- Title`   Collapsed by default (click to expand)
+
+    A chevron indicator is shown at the end of the header line:
+    󰅀 (expanded) / 󰅂 (collapsed).  Click the header line to toggle.
+
+Code blocks inside callouts: ~
+
+    Code fences (```) inside callout bodies are detected and rendered
+    with the blockquote bar prefix, String highlight, and treesitter
+    syntax highlighting (when available).
+
     Lines exceeding 80 characters are wrapped at word boundaries with
     CJK/fullwidth character support.  The full PR description is shown
     by default.  You can limit the number of lines by passing
@@ -377,7 +397,9 @@ Markdown notations:  headings, bold, inline code, links, strikethrough,
 issue references, unordered and ordered lists, blockquotes (including
 nested), GitHub alerts (NOTE, TIP, IMPORTANT, WARNING, CAUTION), Obsidian
 callouts (ABSTRACT, TODO, SUCCESS, QUESTION, FAILURE, DANGER, BUG, EXAMPLE,
-QUOTE), `==highlight==` markers, `[[wikilinks]]`, `![[embeds]]`, code
+QUOTE) with foldable callout support (`[!TYPE]+`/`[!TYPE]-`),
+`==highlight==` markers, `[[wikilinks]]`, `![[embeds]]`, code blocks
+inside callouts with treesitter highlighting, code
 blocks with and without language specification, and combined inline
 formatting.
 

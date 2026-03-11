@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13.0] - 2026-03-11
+
+### Added
+
+- **Foldable callouts**: Obsidian-compatible `[!TYPE]+` (default expanded) and `[!TYPE]-` (default collapsed) fold modifiers with click-to-toggle
+- **Code blocks inside callouts**: code fences inside callout bodies are now detected and rendered with blockquote bar prefix and treesitter syntax highlighting
+- **Unknown callout types**: any `[!type]` is now recognized as a callout (rendered with generic ❝ icon and NOTE style)
+
+### Fixed
+
+- Treesitter highlighting on truncated code lines no longer bleeds across truncation boundaries (e.g. heredoc start on a truncated line coloring visible filenames)
+- Treesitter parsing now uses original (non-truncated) source lines, preventing truncation from breaking multi-line syntax like heredocs
+
 ## [1.12.0] - 2026-03-11
 
 ### Added
