@@ -139,6 +139,9 @@ MdPreview.show = function(opts)
   local buf = vim.api.nvim_create_buf(false, true)
   local ns = vim.api.nvim_create_namespace "ghsigns_md_preview"
 
+  -- Obsidian ==highlight== marker
+  vim.api.nvim_set_hl(0, "GhsignsHighlight", { bg = "#3b3600", fg = "#ffec80", default = true })
+
   display_utils.apply_content_to_buffer(buf, ns, content)
   local win = display_utils.open_float_window(buf, content, float_win, {
     title = " Markdown Preview ",

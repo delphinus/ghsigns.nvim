@@ -264,6 +264,51 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Highlight markers", function()
+    it("should remove == markers and add GhsignsHighlight", function()
+      local text, highlights = markdown.render("This is ==highlighted== text")
+      eq("This is highlighted text", text)
+      local hl = nil
+      for _, h in ipairs(highlights) do
+        if h.hl == "GhsignsHighlight" then
+          hl = h
+          break
+        end
+      end
+      assert.is_not_nil(hl)
+      eq("highlighted", text:sub(hl.col + 1, hl.end_col))
+    end)
+
+    it("should handle multiple highlights in one line", function()
+      local text, highlights = markdown.render("==foo== and ==bar==")
+      eq("foo and bar", text)
+      local hl_count = 0
+      for _, h in ipairs(highlights) do
+        if h.hl == "GhsignsHighlight" then
+          hl_count = hl_count + 1
+        end
+      end
+      eq(2, hl_count)
+    end)
+
+    it("should not match single = signs", function()
+      local text, highlights = markdown.render("a = b = c")
+      eq("a = b = c", text)
+      local hl_count = 0
+      for _, h in ipairs(highlights) do
+        if h.hl == "GhsignsHighlight" then
+          hl_count = hl_count + 1
+        end
+      end
+      eq(0, hl_count)
+    end)
+
+    it("should work combined with bold", function()
+      local text = markdown.render("**bold** and ==highlight==")
+      eq("bold and highlight", text)
+    end)
+  end)
+
   describe("Blockquote", function()
     it("should replace > prefix with visual bar", function()
       local text, highlights, links, special_type = markdown.render("> Quoted text")
