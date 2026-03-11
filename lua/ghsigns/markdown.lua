@@ -17,13 +17,35 @@ local Markdown = {}
 
 local MAX_URL_DISPLAY_WIDTH = 50
 
---- GitHub Flavored Markdown alert types
+--- GitHub Flavored Markdown + Obsidian alert/callout types
 local ALERT_TYPES = {
+  -- GitHub Alerts
   NOTE = { icon = "󰋽", label = "Note" },
   TIP = { icon = "󰌶", label = "Tip" },
   IMPORTANT = { icon = "󰅾", label = "Important" },
   WARNING = { icon = "󰀪", label = "Warning" },
   CAUTION = { icon = "󰳦", label = "Caution" },
+  -- Obsidian additional types
+  ABSTRACT = { icon = "󱉫", label = "Abstract" },
+  SUMMARY = { icon = "󱉫", label = "Summary", style = "ABSTRACT" },
+  TLDR = { icon = "󱉫", label = "TL;DR", style = "ABSTRACT" },
+  INFO = { icon = "󰋽", label = "Info", style = "NOTE" },
+  TODO = { icon = "󰄬", label = "Todo" },
+  SUCCESS = { icon = "󰄬", label = "Success" },
+  CHECK = { icon = "󰄬", label = "Check", style = "SUCCESS" },
+  DONE = { icon = "󰄬", label = "Done", style = "SUCCESS" },
+  QUESTION = { icon = "󱈅", label = "Question" },
+  HELP = { icon = "󱈅", label = "Help", style = "QUESTION" },
+  FAQ = { icon = "󱈅", label = "FAQ", style = "QUESTION" },
+  FAILURE = { icon = "󰅙", label = "Failure" },
+  FAIL = { icon = "󰅙", label = "Fail", style = "FAILURE" },
+  MISSING = { icon = "󰅙", label = "Missing", style = "FAILURE" },
+  DANGER = { icon = "󱐌", label = "Danger" },
+  ERROR = { icon = "󱐌", label = "Error", style = "DANGER" },
+  BUG = { icon = "󱈰", label = "Bug" },
+  EXAMPLE = { icon = "󰆹", label = "Example" },
+  QUOTE = { icon = "󱗝", label = "Quote" },
+  CITE = { icon = "󱗝", label = "Cite", style = "QUOTE" },
 }
 
 --- Adjust highlight and link positions after character removals
@@ -382,14 +404,25 @@ Markdown.render = function(text, repo_base_url, autolinks)
     is_blockquote = true
   end
 
-  -- Detect GitHub alert syntax [!TYPE] in blockquotes (must be exactly "[!TYPE]" with nothing else)
+  -- Detect alert/callout syntax [!TYPE] or [!TYPE] Custom Title in blockquotes
   if is_blockquote then
-    local alert_key = rendered_text:match "^%[!(%u+)%]$"
-    if alert_key and ALERT_TYPES[alert_key] then
+    local alert_key, custom_title = rendered_text:match "^%[!(%a+)%]%s+(.+)$"
+    if not alert_key then
+      alert_key = rendered_text:match "^%[!(%a+)%]$"
+    end
+    if alert_key then
+      alert_key = alert_key:upper()
       local alert = ALERT_TYPES[alert_key]
-      rendered_text = alert.icon .. " " .. alert.label
-      rendered_text = apply_blockquote_prefix(rendered_text, quote_prefix, highlights, links)
-      return rendered_text, highlights, links, "blockquote", nil, alert_key
+      if alert then
+        local style_key = alert.style or alert_key
+        if custom_title then
+          rendered_text = alert.icon .. " " .. custom_title
+        else
+          rendered_text = alert.icon .. " " .. alert.label
+        end
+        rendered_text = apply_blockquote_prefix(rendered_text, quote_prefix, highlights, links)
+        return rendered_text, highlights, links, "blockquote", nil, style_key
+      end
     end
   end
 

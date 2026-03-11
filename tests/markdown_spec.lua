@@ -398,11 +398,53 @@ describe("Markdown rendering", function()
       assert.is_nil(alert_type)
     end)
 
-    it("should treat > [!NOTE] extra as normal blockquote", function()
-      local text, highlights, links, special_type, _, alert_type = markdown.render("> [!NOTE] extra")
-      eq("│ [!NOTE] extra", text)
+    it("should render callout with custom title", function()
+      local text, highlights, links, special_type, _, alert_type = markdown.render("> [!NOTE] My Custom Title")
+      eq("│ 󰋽 My Custom Title", text)
       eq("blockquote", special_type)
-      assert.is_nil(alert_type)
+      eq("NOTE", alert_type)
+    end)
+
+    it("should render Obsidian-specific alert types", function()
+      local obsidian_types = {
+        { input = "> [!BUG]", label = "󱈰 Bug", alert = "BUG" },
+        { input = "> [!EXAMPLE]", label = "󰆹 Example", alert = "EXAMPLE" },
+        { input = "> [!QUOTE]", label = "󱗝 Quote", alert = "QUOTE" },
+        { input = "> [!TODO]", label = "󰄬 Todo", alert = "TODO" },
+        { input = "> [!SUCCESS]", label = "󰄬 Success", alert = "SUCCESS" },
+        { input = "> [!QUESTION]", label = "󱈅 Question", alert = "QUESTION" },
+        { input = "> [!FAILURE]", label = "󰅙 Failure", alert = "FAILURE" },
+        { input = "> [!DANGER]", label = "󱐌 Danger", alert = "DANGER" },
+        { input = "> [!ABSTRACT]", label = "󱉫 Abstract", alert = "ABSTRACT" },
+      }
+      for _, t in ipairs(obsidian_types) do
+        local text, _, _, _, _, alert_type = markdown.render(t.input)
+        eq("│ " .. t.label, text)
+        eq(t.alert, alert_type)
+      end
+    end)
+
+    it("should resolve alias types to parent style", function()
+      local aliases = {
+        { input = "> [!TLDR]", label = "󱉫 TL;DR", style = "ABSTRACT" },
+        { input = "> [!INFO]", label = "󰋽 Info", style = "NOTE" },
+        { input = "> [!DONE]", label = "󰄬 Done", style = "SUCCESS" },
+        { input = "> [!HELP]", label = "󱈅 Help", style = "QUESTION" },
+        { input = "> [!FAIL]", label = "󰅙 Fail", style = "FAILURE" },
+        { input = "> [!ERROR]", label = "󱐌 Error", style = "DANGER" },
+        { input = "> [!CITE]", label = "󱗝 Cite", style = "QUOTE" },
+      }
+      for _, t in ipairs(aliases) do
+        local text, _, _, _, _, alert_type = markdown.render(t.input)
+        eq("│ " .. t.label, text)
+        eq(t.style, alert_type)
+      end
+    end)
+
+    it("should match case-insensitively", function()
+      local text, _, _, _, _, alert_type = markdown.render("> [!note]")
+      eq("│ 󰋽 Note", text)
+      eq("NOTE", alert_type)
     end)
   end)
 
