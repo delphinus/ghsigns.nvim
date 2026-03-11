@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.16.0] - 2026-03-11
+
+### Added
+
+- **Level-specific heading icons**: headings now display distinct icons per level (◉ ○ ◆ ◇ ▸ ▹ for h1–h6) making heading hierarchy visually clear at a glance
+- **Heading highlight groups**: new `GhsignsH1`–`GhsignsH6` highlight groups that inherit colors from treesitter `@markup.heading.N.markdown` groups (fallback to `Title`)
+- Updated `show_demo()` with h3 subheadings to showcase heading level differentiation
+
+### Fixed
+
+- **Blank line control around headings**: headings now always have exactly one blank line before them (except at the start of content); blank lines after headings are removed; multiple consecutive blank lines before a heading are collapsed to one
+
 ## [1.15.0] - 2026-03-11
 
 ### Fixed

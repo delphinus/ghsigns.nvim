@@ -151,7 +151,7 @@ Markdown rendering: ~
 
     The PR description supports the following Markdown elements:
 
-    - Headings (`##`)              |Title| highlight
+    - Headings (`#`..`######`)     Level-specific icon + GhsignsH* highlight
     - Bold (`**text**`)            |Bold| highlight
     - Inline code (`` `code` ``)   |String| highlight
     - Links (`[text](url)`)        |Underlined|, clickable
@@ -365,6 +365,22 @@ The following highlight groups are defined by the plugin:
     *GhsignsAlertQuote* *GhsignsAlertQuoteBg*
         For `[!QUOTE]`, `[!CITE]`.  fg from Comment.
 
+    *GhsignsH1* *GhsignsH2* *GhsignsH3* *GhsignsH4* *GhsignsH5* *GhsignsH6*
+        Heading highlight groups for levels 1-6.  Each heading is prefixed
+        with a level-specific icon:
+
+        Level   Icon ~
+        `#`       ◉
+        `##`      ○
+        `###`     ◆
+        `####`    ◇
+        `#####`   ▸
+        `######`  ▹
+
+        Colors are inherited from treesitter `@markup.heading.N.markdown`
+        groups when available, falling back to |hl-Title|.
+        Uses `default = true` so users can override.
+
     *GhsignsHighlight*
         Obsidian `==highlight==` marker.  Yellow text on dark yellow bg.
         Uses `default = true` so users can override with their colorscheme.
@@ -388,7 +404,6 @@ The following standard highlight groups are used in the floating window:
     |hl-Operator|             Branch arrow symbol
     |hl-Special|              List markers (-, *, 1.)
     |hl-String|               Code blocks, base branch name, Author value
-    |hl-Title|                Markdown headings
     |hl-Underlined|           Links and issue references
     |hl-WarningMsg|           [DRAFT] indicator
     Tag                     Labels
