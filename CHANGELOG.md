@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.15.0] - 2026-03-11
+
+### Fixed
+
+- **Frontmatter truncation**: long frontmatter property values in Markdown Preview now truncate at `max_width` with `…` ellipsis, preventing the floating window from becoming too wide
+- **Wrapped list item highlight offset**: inline code highlights on wrapped list items were shifted left by the list marker width (e.g. `Title` showing only `Tit` colored), caused by `distribute_highlights` and `distribute_links` not accounting for `list_prefix_len` on the first wrapped line
+- **List marker visibility on wrapped lines**: list marker `Special` highlight was being overlapped by `String` highlight on the first line of wrapped list items, making them not appear as bullet points
+
 ## [1.14.0] - 2026-03-11
 
 ### Added
