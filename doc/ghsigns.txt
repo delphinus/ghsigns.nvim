@@ -152,9 +152,12 @@ Markdown rendering: ~
     The PR description supports the following Markdown elements:
 
     - Headings (`#`..`######`)     Level-specific icon + GhsignsH* highlight
+    - Setext headings              `text` + `===`/`---` underline
     - Bold (`**text**`)            |Bold| highlight
     - Inline code (`` `code` ``)   |String| highlight
     - Links (`[text](url)`)        |Underlined|, clickable
+    - Image links                  `[![alt](img)](url)` shows alt text
+    - Reference links              `[text][ref]` and `[text]` shortcut
     - Strikethrough (`~~text~~`)   |DiagnosticDeprecated| highlight
     - Issue references (`#123`)    |Underlined|, clickable link to GitHub
     - Unordered lists (`- item`)   |Special| marker highlight

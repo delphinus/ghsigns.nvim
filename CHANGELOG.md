@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] - 2026-03-11
+
+### Added
+
+- **Reference-style links**: `[text][ref]` and `[text]` shortcut reference links are now resolved using `[label]: url` definitions in the document; definition lines are hidden from rendered output
+- **Image links**: `[![alt](img-url)](link-url)` patterns now render the alt text as a clickable link to the outer URL, using balanced bracket matching
+- **Setext headings**: lines followed by `===` (h1) or `---` (h2) underlines are now recognized as headings with proper icons and highlights
+
 ## [1.16.1] - 2026-03-11
 
 ### Fixed
