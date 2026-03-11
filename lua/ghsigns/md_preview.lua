@@ -200,14 +200,24 @@ MdPreview.build_content = function(lines, opts)
       flush_table()
     end
 
-    -- Skip blank lines immediately after headings (outside code blocks)
-    if not in_code_block and is_blank and prev_was_heading then
-      prev_was_blank = true
-      goto continue
+    -- Skip blank lines adjacent to headings (outside code blocks)
+    if not in_code_block and is_blank then
+      local skip = prev_was_heading
+      if not skip then
+        for k = i + 1, #lines do
+          if not lines[k]:match "^%s*$" then
+            skip = lines[k]:match "^#+%s+" ~= nil
+            break
+          end
+        end
+      end
+      if skip then
+        goto continue
+      end
     end
 
-    -- Auto-insert blank line before headings if not already preceded by one
-    if not in_code_block and is_heading and lines_shown > 0 and not prev_was_blank then
+    -- Ensure exactly one blank line before headings (except the first content)
+    if not in_code_block and is_heading and lines_shown > 0 then
       b:add_line "  "
       lines_shown = lines_shown + 1
     end
@@ -423,8 +433,9 @@ MdPreview.show = function(opts)
   -- Obsidian ==highlight== marker
   vim.api.nvim_set_hl(0, "GhsignsHighlight", { bg = "#3b3600", fg = "#ffec80", default = true })
 
-  -- Set up alert highlight groups (shared with pr_display)
+  -- Set up highlight groups (shared with pr_display)
   local pr_display = require "ghsigns.pr_display"
+  pr_display.setup_heading_highlights()
   pr_display.setup_alert_highlights()
 
   local content

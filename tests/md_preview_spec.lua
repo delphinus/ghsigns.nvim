@@ -32,20 +32,18 @@ describe("Markdown Preview content rendering", function()
   -- Group 1: Headings
   ---------------------------------------------------------------------------
   describe("Headings", function()
-    it("should render heading with Title highlight", function()
+    it("should render h2 heading with icon and GhsignsH2 highlight", function()
       local c = md_preview.build_content { "## My Heading" }
-      eq("  My Heading", c.lines[1])
-      eq({
-        { col = 2, end_col = 12, hl = "Title" },
-      }, hl_for_line(c, 0))
+      eq("  ○ My Heading", c.lines[1])
+      local hls = hl_for_line(c, 0)
+      eq("GhsignsH2", hls[1].hl)
     end)
 
-    it("should render h1 heading", function()
+    it("should render h1 heading with icon and GhsignsH1 highlight", function()
       local c = md_preview.build_content { "# Top Level" }
-      eq("  Top Level", c.lines[1])
-      eq({
-        { col = 2, end_col = 11, hl = "Title" },
-      }, hl_for_line(c, 0))
+      eq("  ◉ Top Level", c.lines[1])
+      local hls = hl_for_line(c, 0)
+      eq("GhsignsH1", hls[1].hl)
     end)
 
     it("should auto-insert blank line before headings", function()
@@ -55,7 +53,7 @@ describe("Markdown Preview content rendering", function()
       }
       eq("  Some text", c.lines[1])
       eq("  ", c.lines[2])
-      eq("  Heading", c.lines[3])
+      eq("  ○ Heading", c.lines[3])
     end)
 
     it("should skip blank lines immediately after headings", function()
@@ -64,8 +62,54 @@ describe("Markdown Preview content rendering", function()
         "",
         "Paragraph",
       }
-      eq("  Heading", c.lines[1])
+      eq("  ○ Heading", c.lines[1])
       eq("  Paragraph", c.lines[2])
+    end)
+
+    it("should insert blank lines between consecutive headings", function()
+      local c = md_preview.build_content {
+        "# hoge1",
+        "## hoge2",
+        "### hoge3",
+        "content",
+      }
+      eq("  ◉ hoge1", c.lines[1])
+      eq("  ", c.lines[2])
+      eq("  ○ hoge2", c.lines[3])
+      eq("  ", c.lines[4])
+      eq("  ◆ hoge3", c.lines[5])
+      eq("  content", c.lines[6])
+    end)
+
+    it("should insert blank lines between consecutive headings with blank lines in source", function()
+      local c = md_preview.build_content {
+        "# hoge1",
+        "",
+        "## hoge2",
+        "",
+        "### hoge3",
+        "content",
+      }
+      eq("  ◉ hoge1", c.lines[1])
+      eq("  ", c.lines[2])
+      eq("  ○ hoge2", c.lines[3])
+      eq("  ", c.lines[4])
+      eq("  ◆ hoge3", c.lines[5])
+      eq("  content", c.lines[6])
+    end)
+
+    it("should collapse multiple blank lines before headings to one", function()
+      local c = md_preview.build_content {
+        "content",
+        "",
+        "",
+        "",
+        "## Heading",
+      }
+      eq("  content", c.lines[1])
+      eq("  ", c.lines[2])
+      eq("  ○ Heading", c.lines[3])
+      eq(3, #c.lines)
     end)
   end)
 
@@ -336,7 +380,7 @@ describe("Markdown Preview content rendering", function()
         "> A quote",
       }
 
-      eq("  Title", c.lines[1])
+      eq("  ○ Title", c.lines[1])
       -- paragraph
       assert.is_truthy(c.lines[2]:match "A paragraph")
       -- list

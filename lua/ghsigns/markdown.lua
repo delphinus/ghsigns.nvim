@@ -487,11 +487,16 @@ Markdown.render = function(text, repo_base_url, autolinks)
   local highlights = {}
   local links = {}
 
-  -- Heading (# ## ###) - early return
-  local heading_content = rendered_text:match "^#+%s+(.+)$"
-  if heading_content then
-    rendered_text = heading_content
-    table.insert(highlights, { col = 0, end_col = #rendered_text, hl = "Title" })
+  -- Heading (# ## ### etc.) - early return with level-specific icon and highlight
+  local heading_markers, heading_content = rendered_text:match "^(#+)%s+(.+)$"
+  if heading_markers then
+    local level = math.min(#heading_markers, 6)
+    local icons = { "◉ ", "○ ", "◆ ", "◇ ", "▸ ", "▹ " }
+    local icon = icons[level]
+    rendered_text = icon .. heading_content
+    local hl_group = "GhsignsH" .. level
+    table.insert(highlights, { col = 0, end_col = #icon, hl = hl_group })
+    table.insert(highlights, { col = #icon, end_col = #rendered_text, hl = hl_group })
     return rendered_text, highlights, links, "heading"
   end
 

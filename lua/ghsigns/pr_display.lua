@@ -56,6 +56,21 @@ PrDisplay.build_pr_content = function(pr, opts)
   return result
 end
 
+--- Set up heading highlight groups (GhsignsH1..GhsignsH6)
+--- Links to @markup.heading.N.markdown if available, otherwise falls back to Title
+function PrDisplay.setup_heading_highlights()
+  for level = 1, 6 do
+    local hl_name = "GhsignsH" .. level
+    local ts_name = "@markup.heading." .. level .. ".markdown"
+    local ts_hl = vim.api.nvim_get_hl(0, { name = ts_name, link = false })
+    if ts_hl.fg then
+      vim.api.nvim_set_hl(0, hl_name, { fg = ts_hl.fg, bold = true, default = true })
+    else
+      vim.api.nvim_set_hl(0, hl_name, { link = "Title", default = true })
+    end
+  end
+end
+
 --- Set up alert highlight groups (GhsignsAlert* and GhsignsAlert*Bg)
 function PrDisplay.setup_alert_highlights()
   local normal_hl = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
@@ -89,6 +104,7 @@ PrDisplay.show_pr_info = function(pr, opts)
   -- Obsidian ==highlight== marker
   vim.api.nvim_set_hl(0, "GhsignsHighlight", { bg = "#3b3600", fg = "#ffec80", default = true })
 
+  PrDisplay.setup_heading_highlights()
   PrDisplay.setup_alert_highlights()
 
   local fold_state = {}
@@ -149,6 +165,8 @@ PrDisplay.show_demo = function()
     "",
     "Related to #123 and #456.",
     "",
+    "### Lists",
+    "",
     "- Unordered item 1",
     "- Unordered item 2",
     "- Unordered item 3",
@@ -157,9 +175,13 @@ PrDisplay.show_demo = function()
     "2. Ordered item two",
     "3. Ordered item three",
     "",
+    "### Blockquotes",
+    "",
     "> Blockquote line 1",
     "> Blockquote line 2",
     ">> Nested blockquote",
+    "",
+    "### Code Blocks",
     "",
     "```lua",
     'local M = {}',
@@ -177,10 +199,14 @@ PrDisplay.show_demo = function()
     "This line is intentionally long to demonstrate that code lines exceeding the max width are truncated with an ellipsis character.",
     "```",
     "",
+    "### Tables",
+    "",
     "| Feature | Syntax | Highlight Group |",
     "|---------|--------|-----------------|",
     "| **Bold** | `**text**` | `Bold` |",
     "| ~~Strikethrough~~ | `~~text~~` | `DiagnosticDeprecated` |",
+    "",
+    "### Inline Elements",
     "",
     "Bare URL (short): https://neovim.io stays as-is.",
     "",
