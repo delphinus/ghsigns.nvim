@@ -41,7 +41,7 @@ local ALERT_HL_BASES = {
 
 --- Build PR content for display (extracted for testability)
 ---@param pr Ghsigns.Pr
----@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[] }
+---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[], fold_state?: table<integer, boolean> }
 ---@return Ghsigns.PrContent
 PrDisplay.build_pr_content = function(pr, opts)
   local b = ContentBuilder.new()
@@ -54,6 +54,22 @@ PrDisplay.build_pr_content = function(pr, opts)
   result.title_text = title_text
   result.close_line_idx = close_line_idx
   return result
+end
+
+--- Set up alert highlight groups (GhsignsAlert* and GhsignsAlert*Bg)
+function PrDisplay.setup_alert_highlights()
+  local normal_hl = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
+  if not normal_hl.bg then
+    normal_hl = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+  end
+  local normal_bg = normal_hl.bg or 0x1e1e2e
+
+  for name, base_hl_name in pairs(ALERT_HL_BASES) do
+    local base_hl = vim.api.nvim_get_hl(0, { name = base_hl_name, link = false })
+    local fg = base_hl.fg or 0xFFFFFF
+    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name, { fg = fg, bold = true, default = true })
+    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name .. "Bg", { bg = blend_color(fg, normal_bg, 0.1), default = true })
+  end
 end
 
 --- @param pr Ghsigns.Pr
@@ -73,24 +89,41 @@ PrDisplay.show_pr_info = function(pr, opts)
   -- Obsidian ==highlight== marker
   vim.api.nvim_set_hl(0, "GhsignsHighlight", { bg = "#3b3600", fg = "#ffec80", default = true })
 
-  -- Create alert highlight groups
-  local normal_hl = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
-  if not normal_hl.bg then
-    normal_hl = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
-  end
-  local normal_bg = normal_hl.bg or 0x1e1e2e
+  PrDisplay.setup_alert_highlights()
 
-  for name, base_hl_name in pairs(ALERT_HL_BASES) do
-    local base_hl = vim.api.nvim_get_hl(0, { name = base_hl_name, link = false })
-    local fg = base_hl.fg or 0xFFFFFF
-    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name, { fg = fg, bold = true, default = true })
-    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name .. "Bg", { bg = blend_color(fg, normal_bg, 0.1), default = true })
+  local fold_state = {}
+  opts = opts or {}
+
+  local function rebuild()
+    opts.fold_state = fold_state
+    local new_content = PrDisplay.build_pr_content(pr, opts)
+    vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    display_utils.apply_content_to_buffer(buf, ns, new_content, { title_url = pr.url })
+    vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+    -- Update content reference for subsequent clicks
+    content = new_content
   end
 
   local content = PrDisplay.build_pr_content(pr, opts)
   display_utils.apply_content_to_buffer(buf, ns, content, { title_url = pr.url })
   local win = display_utils.open_float_window(buf, content, float_win)
-  display_utils.setup_float_keymaps(buf, ns, win, content, float_win, { close_line_idx = content.close_line_idx })
+
+  -- Initialize fold_state from default fold states
+  for _, fold in ipairs(content.callout_folds) do
+    fold_state[fold.source_line] = fold.collapsed
+  end
+
+  display_utils.setup_float_keymaps(buf, ns, win, content, float_win, {
+    close_line_idx = content.close_line_idx,
+    get_content = function()
+      return content
+    end,
+    on_fold_toggle = function(source_line, collapsed)
+      fold_state[source_line] = collapsed
+      rebuild()
+    end,
+  })
 end
 
 --- Show a demo floating window with all supported Markdown notations
@@ -159,6 +192,13 @@ PrDisplay.show_demo = function()
     "",
     "> [!CAUTION]",
     "> This is a caution alert.",
+    "",
+    "> [!NOTE]- Collapsed by default",
+    "> This content is hidden until you click the header.",
+    "> It supports multiple lines.",
+    "",
+    "> [!TIP]+ Expanded by default",
+    "> This content is visible but can be collapsed by clicking.",
   }, "\n")
 
   local demo_pr = {

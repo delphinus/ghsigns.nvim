@@ -21,12 +21,20 @@
 ---@field language string
 ---@field start_line integer 0-indexed, first code line
 ---@field end_line integer   0-indexed, last code line
+---@field prefix_len integer byte length of line prefix to strip for treesitter (default 2)
+---@field source_lines? string[] original (non-truncated) code lines for accurate treesitter parsing
+
+---@class Ghsigns.CalloutFold
+---@field header_line integer 0-indexed rendered line of the callout header
+---@field source_line integer 1-indexed source line index
+---@field collapsed boolean current fold state
 
 ---@class Ghsigns.PrContent
 ---@field lines string[]
 ---@field highlights Ghsigns.LineHighlight[]
 ---@field link_metadata Ghsigns.LinkMetadata[]
 ---@field code_blocks Ghsigns.CodeBlock[]
+---@field callout_folds Ghsigns.CalloutFold[]
 ---@field title_line integer
 ---@field title_text string
 ---@field close_line_idx integer
@@ -36,6 +44,7 @@
 ---@field highlights Ghsigns.LineHighlight[]
 ---@field link_metadata Ghsigns.LinkMetadata[]
 ---@field code_blocks Ghsigns.CodeBlock[]
+---@field callout_folds Ghsigns.CalloutFold[]
 local ContentBuilder = {}
 
 ---@return Ghsigns.ContentBuilder
@@ -45,6 +54,7 @@ function ContentBuilder.new()
     highlights = {},
     link_metadata = {},
     code_blocks = {},
+    callout_folds = {},
   }, { __index = ContentBuilder })
 end
 
@@ -75,6 +85,7 @@ function ContentBuilder:result()
     highlights = self.highlights,
     link_metadata = self.link_metadata,
     code_blocks = self.code_blocks,
+    callout_folds = self.callout_folds,
   }
 end
 
@@ -568,9 +579,10 @@ end
 ---@param repo_base_url? string
 ---@param autolinks? Ghsigns.Autolink[]
 ---@return string? alert_type Alert type if this line is an alert header
+---@return string? fold_mod Fold modifier ("+" or "-") if this is a foldable callout
 function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url, autolinks)
   local markdown = require "ghsigns.markdown"
-  local rendered_text, md_highlights, md_links, special_type, list_marker, alert_type =
+  local rendered_text, md_highlights, md_links, special_type, list_marker, alert_type, fold_mod =
     markdown.render(text, repo_base_url, autolinks)
 
   local quote_prefix = ""
@@ -584,7 +596,7 @@ function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url
     self:add_simple_markdown(rendered_text, md_highlights, md_links, indent)
   end
 
-  return alert_type
+  return alert_type, fold_mod
 end
 
 --- Apply alert styling to lines added between lines_before and current line count
@@ -647,6 +659,21 @@ function ContentBuilder:apply_alert_styling(lines_before, lines_after, alert_typ
   end
 end
 
+--- Append a fold indicator (›/∨) to the end of a callout header line
+---@param self Ghsigns.ContentBuilder
+---@param line_idx integer 0-indexed rendered line
+---@param is_collapsed boolean
+function ContentBuilder:add_fold_indicator(line_idx, is_collapsed)
+  local indicator = is_collapsed and " 󰅂" or " 󰅀"
+  local line = self.lines[line_idx + 1]
+  if not line then
+    return
+  end
+
+  -- Append indicator at the end of the line (no highlight shifts needed)
+  self.lines[line_idx + 1] = line .. indicator
+end
+
 --- Normalize body text: fix line endings, strip HTML, compress blank lines
 ---@param body string
 ---@return string[]
@@ -671,7 +698,7 @@ end
 --- Build the body section (description with markdown rendering)
 ---@param self Ghsigns.ContentBuilder
 ---@param p Ghsigns.PrData
----@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[] }
+---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[], fold_state?: table<integer, boolean> }
 function ContentBuilder:build_body(p, opts)
   if not p.body or p.body == "" then
     return
@@ -682,6 +709,7 @@ function ContentBuilder:build_body(p, opts)
     repo_base_url = p.url:match "(https://[^/]+/[^/]+/[^/]+)"
   end
   local autolinks = opts and opts.autolinks or nil
+  local fold_state = opts and opts.fold_state or {}
 
   self:add_line ""
   self:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
@@ -690,6 +718,7 @@ function ContentBuilder:build_body(p, opts)
   local in_code_block = false
   local code_block_lang = nil
   local code_block_start = nil
+  local code_source_lines = nil
   local lines_shown = 0
   local max_lines = (opts and opts.max_body_lines) or math.huge
   local max_width = 80
@@ -698,6 +727,12 @@ function ContentBuilder:build_body(p, opts)
   local table_buf = {}
   local truncated = false
   local current_alert_type = nil
+  local skip_callout_body = false
+  local in_callout_code_block = false
+  local callout_code_lang = nil
+  local callout_code_start = nil
+  local callout_code_prefix = nil
+  local callout_code_source_lines = nil
   local in_comment_block = false
 
   --- Flush accumulated table lines
@@ -711,10 +746,20 @@ function ContentBuilder:build_body(p, opts)
     end
   end
 
-  for _, body_line in ipairs(cleaned_lines) do
+  for src_idx, body_line in ipairs(cleaned_lines) do
     local is_blank = body_line:match "^%s*$" ~= nil
     local is_heading = (not in_code_block) and body_line:match "^#+%s+" ~= nil
     local is_table_line = (not in_code_block) and body_line:match "^%s*|" ~= nil
+
+    -- Skip body lines of a collapsed foldable callout
+    if skip_callout_body then
+      if body_line:match "^>" then
+        goto continue
+      else
+        skip_callout_body = false
+        current_alert_type = nil
+      end
+    end
 
     -- Toggle Obsidian block comment (outside code blocks)
     if not in_code_block and body_line:match "^%s*%%%%%s*$" then
@@ -765,19 +810,23 @@ function ContentBuilder:build_body(p, opts)
         in_code_block = true
         code_block_lang = body_line:match "^```(%S+)" or nil
         code_block_start = #self.lines -- 0-indexed position of next code line
+        code_source_lines = {}
       else
         if code_block_lang and code_block_start < #self.lines then
           table.insert(self.code_blocks, {
             language = code_block_lang,
             start_line = code_block_start,
             end_line = #self.lines - 1,
+            source_lines = code_source_lines,
           })
         end
         in_code_block = false
         code_block_lang = nil
+        code_source_lines = nil
       end
       -- Don't call add_line: fence lines are hidden and don't count toward lines_shown
     elseif in_code_block then
+      table.insert(code_source_lines, body_line)
       local indented = "  " .. body_line
       local display_width = vim.fn.strdisplaywidth(indented)
       if display_width > max_width then
@@ -798,15 +847,96 @@ function ContentBuilder:build_body(p, opts)
         self:add_line(indented, { { col = 0, end_col = -1, hl = "String" } })
       end
     else
-      local alert_type = self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks)
-      local lines_after = #self.lines
-      if alert_type then
-        current_alert_type = alert_type
-        self:apply_alert_styling(lines_before, lines_after, current_alert_type, true)
-      elseif current_alert_type and body_line:match "^>" then
-        self:apply_alert_styling(lines_before, lines_after, current_alert_type, false)
-      else
-        current_alert_type = nil
+      local handled = false
+
+      -- Handle code blocks inside callouts
+      if current_alert_type and body_line:match "^>" then
+        local stripped = body_line:gsub("^>%s?", "")
+        if stripped:match "^```" then
+          if not in_callout_code_block then
+            in_callout_code_block = true
+            callout_code_lang = stripped:match "^```(%S+)" or nil
+            callout_code_prefix = "  │ "
+            callout_code_start = #self.lines
+            callout_code_source_lines = {}
+          else
+            if callout_code_lang and callout_code_start < #self.lines then
+              table.insert(self.code_blocks, {
+                language = callout_code_lang,
+                start_line = callout_code_start,
+                end_line = #self.lines - 1,
+                prefix_len = #callout_code_prefix,
+                source_lines = callout_code_source_lines,
+              })
+            end
+            in_callout_code_block = false
+            callout_code_lang = nil
+            callout_code_source_lines = nil
+          end
+          handled = true
+        elseif in_callout_code_block then
+          table.insert(callout_code_source_lines, stripped)
+          local code_line = callout_code_prefix .. stripped
+          local display_width = vim.fn.strdisplaywidth(code_line)
+          if display_width > max_width then
+            local target = max_width - 1
+            local current_width = 0
+            local byte_pos = 0
+            for char in code_line:gmatch "[%z\1-\127\194-\253][\128-\191]*" do
+              local char_width = vim.fn.strdisplaywidth(char)
+              if current_width + char_width > target then
+                break
+              end
+              current_width = current_width + char_width
+              byte_pos = byte_pos + #char
+            end
+            code_line = code_line:sub(1, byte_pos) .. "…"
+          end
+          self:add_line(code_line, {
+            { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
+            { col = #callout_code_prefix, end_col = -1, hl = "String" },
+          })
+          self:apply_alert_styling(lines_before, #self.lines, current_alert_type, false)
+          handled = true
+        end
+      end
+
+      if not handled then
+        -- Reset callout code block state if we leave the callout
+        if in_callout_code_block and not (body_line:match "^>") then
+          in_callout_code_block = false
+          callout_code_lang = nil
+        end
+
+        local alert_type, fold_mod = self:add_markdown_line(body_line, "  ", max_width, repo_base_url, autolinks)
+        local lines_after = #self.lines
+        if alert_type then
+          current_alert_type = alert_type
+
+          if fold_mod then
+            local is_collapsed
+            if fold_state[src_idx] ~= nil then
+              is_collapsed = fold_state[src_idx]
+            else
+              is_collapsed = (fold_mod == "-")
+            end
+            self:add_fold_indicator(lines_before, is_collapsed)
+            table.insert(self.callout_folds, {
+              header_line = lines_before,
+              source_line = src_idx,
+              collapsed = is_collapsed,
+            })
+            if is_collapsed then
+              skip_callout_body = true
+            end
+          end
+
+          self:apply_alert_styling(lines_before, #self.lines, current_alert_type, true)
+        elseif current_alert_type and body_line:match "^>" then
+          self:apply_alert_styling(lines_before, lines_after, current_alert_type, false)
+        else
+          current_alert_type = nil
+        end
       end
     end
 

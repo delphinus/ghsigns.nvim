@@ -504,25 +504,45 @@ Markdown.render = function(text, repo_base_url, autolinks)
     is_blockquote = true
   end
 
-  -- Detect alert/callout syntax [!TYPE] or [!TYPE] Custom Title in blockquotes
+  -- Detect alert/callout syntax [!TYPE], [!TYPE]+, [!TYPE]- with optional title
   if is_blockquote then
-    local alert_key, custom_title = rendered_text:match "^%[!(%a+)%]%s+(.+)$"
+    local alert_key, fold_mod, custom_title
+    -- Try: [!TYPE]+/- Title
+    alert_key, fold_mod, custom_title = rendered_text:match "^%[!(%a+)%]([+-])%s+(.+)$"
     if not alert_key then
+      -- Try: [!TYPE] Title (no fold modifier)
+      alert_key, custom_title = rendered_text:match "^%[!(%a+)%]%s+(.+)$"
+    end
+    if not alert_key then
+      -- Try: [!TYPE]+/- (no title)
+      alert_key, fold_mod = rendered_text:match "^%[!(%a+)%]([+-])$"
+    end
+    if not alert_key then
+      -- Try: [!TYPE] (no fold modifier, no title)
       alert_key = rendered_text:match "^%[!(%a+)%]$"
     end
     if alert_key then
       alert_key = alert_key:upper()
       local alert = ALERT_TYPES[alert_key]
+      local style_key, icon, label
       if alert then
-        local style_key = alert.style or alert_key
-        if custom_title then
-          rendered_text = alert.icon .. " " .. custom_title
-        else
-          rendered_text = alert.icon .. " " .. alert.label
-        end
-        rendered_text = apply_blockquote_prefix(rendered_text, quote_prefix, highlights, links)
-        return rendered_text, highlights, links, "blockquote", nil, style_key
+        style_key = alert.style or alert_key
+        icon = alert.icon
+        label = alert.label
+      else
+        -- Unknown callout type: use a generic style
+        style_key = "NOTE"
+        icon = "❝"
+        -- Capitalize: first letter upper, rest lower
+        label = alert_key:sub(1, 1) .. alert_key:sub(2):lower()
       end
+      if custom_title then
+        rendered_text = icon .. " " .. custom_title
+      else
+        rendered_text = icon .. " " .. label
+      end
+      rendered_text = apply_blockquote_prefix(rendered_text, quote_prefix, highlights, links)
+      return rendered_text, highlights, links, "blockquote", nil, style_key, fold_mod
     end
   end
 

@@ -17,13 +17,13 @@ describe("PR content rendering", function()
   end)
 
   -- Helper to build content with a body using minimal PR fields
-  local function build_with_body(body, url)
-    return pr_display.build_pr_content {
+  local function build_with_body(body, url, opts)
+    return pr_display.build_pr_content({
       number = 1,
       title = "T",
       body = body,
       url = url,
-    }
+    }, opts)
   end
 
   -- Helper to find highlight groups for a specific line index
@@ -1418,6 +1418,168 @@ All 21 tests pass:
           end
         end
         assert.is_true(found_bg, "Line offset " .. line_offset .. " should have alert bg")
+      end
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 12: Foldable callout rendering
+  ---------------------------------------------------------------------------
+  describe("Foldable callout rendering", function()
+    it("should show fold indicator on foldable callout header", function()
+      local c = build_with_body "> [!NOTE]+ Expandable\n> Body content"
+      -- Find the header line
+      local header_line = nil
+      for i, l in ipairs(c.lines) do
+        if l:match "󰅀" then
+          header_line = i
+          break
+        end
+      end
+      assert.is_not_nil(header_line, "Should have a 󰅀 indicator for expanded foldable callout")
+      assert.is_not_nil(c.lines[header_line]:match "Expandable.*󰅀")
+    end)
+
+    it("should collapse body lines for - modifier by default", function()
+      local c = build_with_body "> [!NOTE]- Collapsed\n> Hidden line 1\n> Hidden line 2"
+      -- Should have 󰅂 indicator
+      local has_collapsed_indicator = false
+      local has_body = false
+      for _, l in ipairs(c.lines) do
+        if l:match "󰅂" then
+          has_collapsed_indicator = true
+        end
+        if l:match "Hidden line" then
+          has_body = true
+        end
+      end
+      assert.is_true(has_collapsed_indicator, "Should have 󰅂 indicator for collapsed callout")
+      assert.is_false(has_body, "Body lines should be hidden when collapsed")
+    end)
+
+    it("should show body lines for + modifier by default", function()
+      local c = build_with_body "> [!TIP]+ Expanded\n> Visible line"
+      local has_body = false
+      for _, l in ipairs(c.lines) do
+        if l:match "Visible line" then
+          has_body = true
+        end
+      end
+      assert.is_true(has_body, "Body lines should be visible when expanded")
+    end)
+
+    it("should populate callout_folds metadata", function()
+      local c = build_with_body "> [!NOTE]- Fold me\n> Body"
+      assert.is_not_nil(c.callout_folds)
+      eq(1, #c.callout_folds)
+      assert.is_true(c.callout_folds[1].collapsed)
+      assert.is_number(c.callout_folds[1].header_line)
+      assert.is_number(c.callout_folds[1].source_line)
+    end)
+
+    it("should respect fold_state override to expand a collapsed callout", function()
+      -- Default is collapsed (-)
+      local c_collapsed = build_with_body "> [!NOTE]- Title\n> Body text"
+      local body_visible = false
+      for _, l in ipairs(c_collapsed.lines) do
+        if l:match "Body text" then body_visible = true end
+      end
+      assert.is_false(body_visible, "Should be collapsed by default")
+
+      -- Override fold_state to expand it
+      local source_line = c_collapsed.callout_folds[1].source_line
+      local c_expanded = build_with_body("> [!NOTE]- Title\n> Body text", nil, {
+        fold_state = { [source_line] = false },
+      })
+      body_visible = false
+      for _, l in ipairs(c_expanded.lines) do
+        if l:match "Body text" then body_visible = true end
+      end
+      assert.is_true(body_visible, "Should be expanded when fold_state overrides")
+    end)
+
+    it("should not affect non-foldable callouts", function()
+      local c = build_with_body "> [!NOTE]\n> Always visible"
+      eq(0, #c.callout_folds)
+      local has_body = false
+      for _, l in ipairs(c.lines) do
+        if l:match "Always visible" then has_body = true end
+      end
+      assert.is_true(has_body)
+    end)
+
+    it("should stop collapsing at non-blockquote lines", function()
+      local c = build_with_body "> [!NOTE]- Collapsed\n> Hidden\n\nVisible after callout"
+      local has_hidden = false
+      local has_visible = false
+      for _, l in ipairs(c.lines) do
+        if l:match "Hidden" then has_hidden = true end
+        if l:match "Visible after callout" then has_visible = true end
+      end
+      assert.is_false(has_hidden, "Callout body should be hidden")
+      assert.is_true(has_visible, "Text after callout should be visible")
+    end)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- Group 13: Code blocks inside callouts
+  ---------------------------------------------------------------------------
+  describe("Code blocks inside callouts", function()
+    it("should render code content inside callout with blockquote bar", function()
+      local c = build_with_body "> [!NOTE]\n> ```bash\n> echo hello\n> ```"
+      local has_code = false
+      for _, l in ipairs(c.lines) do
+        if l:match "echo hello" then
+          has_code = true
+          -- Should have blockquote bar prefix
+          assert.is_not_nil(l:match "│")
+        end
+      end
+      assert.is_true(has_code, "Code content should be visible inside callout")
+    end)
+
+    it("should hide fence lines inside callout", function()
+      local c = build_with_body "> [!NOTE]\n> ```bash\n> echo hello\n> ```"
+      for _, l in ipairs(c.lines) do
+        assert.is_nil(l:match "```", "Fence markers should be hidden")
+      end
+    end)
+
+    it("should register code block for treesitter highlighting", function()
+      local c = build_with_body "> [!NOTE]\n> ```bash\n> echo hello\n> ```"
+      assert.is_true(#c.code_blocks >= 1, "Should register code block")
+      local block = c.code_blocks[1]
+      eq("bash", block.language)
+      assert.is_true(block.prefix_len > 2, "Should have larger prefix_len for callout code")
+    end)
+
+    it("should apply alert styling to code lines inside callout", function()
+      local c = build_with_body "> [!NOTE]\n> ```lua\n> local x = 1\n> ```"
+      -- Find the code line
+      local code_line_idx = nil
+      for i, l in ipairs(c.lines) do
+        if l:match "local x" then
+          code_line_idx = i - 1
+          break
+        end
+      end
+      assert.is_not_nil(code_line_idx)
+      -- Should have alert background
+      local hl = hl_for_line(c, code_line_idx)
+      assert.is_not_nil(hl)
+      local found_bg = false
+      for _, g in ipairs(hl) do
+        if g.hl == "GhsignsAlertNoteBg" and g.hl_eol == true then
+          found_bg = true
+        end
+      end
+      assert.is_true(found_bg, "Code line inside callout should have alert background")
+    end)
+
+    it("should skip code blocks inside collapsed foldable callout", function()
+      local c = build_with_body "> [!NOTE]-\n> ```bash\n> echo hidden\n> ```"
+      for _, l in ipairs(c.lines) do
+        assert.is_nil(l:match "echo hidden", "Code in collapsed callout should be hidden")
       end
     end)
   end)

@@ -84,13 +84,23 @@ MdPreview.build_content = function(lines, opts)
     end
   end
 
+  local fold_state = opts.fold_state or {}
+
   local in_code_block = false
   local code_block_lang = nil
   local code_block_start = nil
+  local code_source_lines = nil
   local prev_was_heading = false
   local prev_was_blank = false
   local table_buf = {}
   local lines_shown = 0
+  local current_alert_type = nil
+  local skip_callout_body = false
+  local in_callout_code_block = false
+  local callout_code_lang = nil
+  local callout_code_start = nil
+  local callout_code_prefix = nil
+  local callout_code_source_lines = nil
   local in_comment_block = false
 
   --- Flush accumulated table lines
@@ -106,6 +116,16 @@ MdPreview.build_content = function(lines, opts)
     local is_blank = line:match "^%s*$" ~= nil
     local is_heading = (not in_code_block) and line:match "^#+%s+" ~= nil
     local is_table_line = (not in_code_block) and line:match "^%s*|" ~= nil
+
+    -- Skip body lines of a collapsed foldable callout
+    if skip_callout_body then
+      if line:match "^>" then
+        goto continue
+      else
+        skip_callout_body = false
+        current_alert_type = nil
+      end
+    end
 
     -- Toggle Obsidian block comment (outside code blocks)
     if not in_code_block and line:match "^%s*%%%%%s*$" then
@@ -146,18 +166,22 @@ MdPreview.build_content = function(lines, opts)
         in_code_block = true
         code_block_lang = line:match "^```(%S+)" or nil
         code_block_start = #b.lines
+        code_source_lines = {}
       else
         if code_block_lang and code_block_start < #b.lines then
           table.insert(b.code_blocks, {
             language = code_block_lang,
             start_line = code_block_start,
             end_line = #b.lines - 1,
+            source_lines = code_source_lines,
           })
         end
         in_code_block = false
         code_block_lang = nil
+        code_source_lines = nil
       end
     elseif in_code_block then
+      table.insert(code_source_lines, line)
       local indented = "  " .. line
       local display_width = vim.fn.strdisplaywidth(indented)
       if display_width > max_width then
@@ -177,7 +201,97 @@ MdPreview.build_content = function(lines, opts)
         b:add_line(indented, { { col = 0, end_col = -1, hl = "String" } })
       end
     else
-      b:add_markdown_line(line, "  ", max_width)
+      local handled = false
+
+      -- Handle code blocks inside callouts
+      if current_alert_type and line:match "^>" then
+        local stripped = line:gsub("^>%s?", "")
+        if stripped:match "^```" then
+          if not in_callout_code_block then
+            in_callout_code_block = true
+            callout_code_lang = stripped:match "^```(%S+)" or nil
+            callout_code_prefix = "  │ "
+            callout_code_start = #b.lines
+            callout_code_source_lines = {}
+          else
+            if callout_code_lang and callout_code_start < #b.lines then
+              table.insert(b.code_blocks, {
+                language = callout_code_lang,
+                start_line = callout_code_start,
+                end_line = #b.lines - 1,
+                prefix_len = #callout_code_prefix,
+                source_lines = callout_code_source_lines,
+              })
+            end
+            in_callout_code_block = false
+            callout_code_lang = nil
+            callout_code_source_lines = nil
+          end
+          handled = true
+        elseif in_callout_code_block then
+          table.insert(callout_code_source_lines, stripped)
+          local code_line = callout_code_prefix .. stripped
+          local display_width = vim.fn.strdisplaywidth(code_line)
+          if display_width > max_width then
+            local target = max_width - 1
+            local current_width = 0
+            local byte_pos = 0
+            for char in code_line:gmatch "[%z\1-\127\194-\253][\128-\191]*" do
+              local char_width = vim.fn.strdisplaywidth(char)
+              if current_width + char_width > target then
+                break
+              end
+              current_width = current_width + char_width
+              byte_pos = byte_pos + #char
+            end
+            code_line = code_line:sub(1, byte_pos) .. "…"
+          end
+          b:add_line(code_line, {
+            { col = 2, end_col = 2 + #"│ ", hl = "FloatBorder" },
+            { col = #callout_code_prefix, end_col = -1, hl = "String" },
+          })
+          b:apply_alert_styling(lines_before, #b.lines, current_alert_type, false)
+          handled = true
+        end
+      end
+
+      if not handled then
+        -- Reset callout code block state if we leave the callout
+        if in_callout_code_block and not (line:match "^>") then
+          in_callout_code_block = false
+          callout_code_lang = nil
+        end
+
+        local alert_type, fold_mod = b:add_markdown_line(line, "  ", max_width)
+        local lines_after = #b.lines
+        if alert_type then
+          current_alert_type = alert_type
+
+          if fold_mod then
+            local is_collapsed
+            if fold_state[i] ~= nil then
+              is_collapsed = fold_state[i]
+            else
+              is_collapsed = (fold_mod == "-")
+            end
+            b:add_fold_indicator(lines_before, is_collapsed)
+            table.insert(b.callout_folds, {
+              header_line = lines_before,
+              source_line = i,
+              collapsed = is_collapsed,
+            })
+            if is_collapsed then
+              skip_callout_body = true
+            end
+          end
+
+          b:apply_alert_styling(lines_before, #b.lines, current_alert_type, true)
+        elseif current_alert_type and line:match "^>" then
+          b:apply_alert_styling(lines_before, lines_after, current_alert_type, false)
+        else
+          current_alert_type = nil
+        end
+      end
     end
 
     local lines_added = #b.lines - lines_before
@@ -211,8 +325,9 @@ MdPreview.show = function(opts)
     return
   end
 
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local content = MdPreview.build_content(lines, opts)
+  local source_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local fold_state = {}
+  opts = opts or {}
 
   local buf = vim.api.nvim_create_buf(false, true)
   local ns = vim.api.nvim_create_namespace "ghsigns_md_preview"
@@ -220,13 +335,44 @@ MdPreview.show = function(opts)
   -- Obsidian ==highlight== marker
   vim.api.nvim_set_hl(0, "GhsignsHighlight", { bg = "#3b3600", fg = "#ffec80", default = true })
 
+  -- Set up alert highlight groups (shared with pr_display)
+  local pr_display = require "ghsigns.pr_display"
+  pr_display.setup_alert_highlights()
+
+  local content
+
+  local function rebuild()
+    opts.fold_state = fold_state
+    local new_content = MdPreview.build_content(source_lines, opts)
+    vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    display_utils.apply_content_to_buffer(buf, ns, new_content)
+    vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+    content = new_content
+  end
+
+  content = MdPreview.build_content(source_lines, opts)
   display_utils.apply_content_to_buffer(buf, ns, content)
   local win = display_utils.open_float_window(buf, content, float_win, {
     title = " Markdown Preview ",
     position = "center",
     enter = true,
   })
-  display_utils.setup_float_keymaps(buf, ns, win, content, float_win)
+
+  -- Initialize fold_state from default fold states
+  for _, fold in ipairs(content.callout_folds) do
+    fold_state[fold.source_line] = fold.collapsed
+  end
+
+  display_utils.setup_float_keymaps(buf, ns, win, content, float_win, {
+    get_content = function()
+      return content
+    end,
+    on_fold_toggle = function(source_line, collapsed)
+      fold_state[source_line] = collapsed
+      rebuild()
+    end,
+  })
 end
 
 return MdPreview
