@@ -77,7 +77,30 @@ MdPreview.build_content = function(lines, opts)
           { col = 2, end_col = 2 + #"Properties", hl = "Title" },
         })
         for _, entry in ipairs(entries) do
-          b:add_labeled("  " .. entry.key, entry.value, "String")
+          local label = "  " .. entry.key
+          local full_line = label .. ": " .. entry.value
+          local display_width = vim.fn.strdisplaywidth(full_line)
+          if display_width > max_width then
+            local target = max_width - 1
+            local current_width = 0
+            local byte_pos = 0
+            for char in full_line:gmatch "[%z\1-\127\194-\253][\128-\191]*" do
+              local char_width = vim.fn.strdisplaywidth(char)
+              if current_width + char_width > target then
+                break
+              end
+              current_width = current_width + char_width
+              byte_pos = byte_pos + #char
+            end
+            local truncated = full_line:sub(1, byte_pos) .. "…"
+            b:add_line(truncated, {
+              { col = 0, end_col = #label, hl = "Comment" },
+              { col = #label + 2, end_col = byte_pos, hl = "String" },
+              { col = byte_pos, end_col = #truncated, hl = "Underlined" },
+            })
+          else
+            b:add_labeled(label, entry.value, "String")
+          end
         end
         b:add_line ""
       end

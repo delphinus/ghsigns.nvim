@@ -259,6 +259,34 @@ describe("Markdown Preview content rendering", function()
       end
       assert.is_true(found, "Expected String highlight for inline code")
     end)
+
+    it("should not overlap inline code highlight with list marker on wrapped lines", function()
+      -- Long list item with inline code that triggers wrapping
+      local c = md_preview.build_content({
+        "- `> [!note]- Title` and `> [!note]+ Title` are not recognized because the pattern does not include them",
+      }, { max_width = 60 })
+      -- Should have at least 2 lines (wrapped)
+      assert.is_true(#c.lines >= 2, "Expected wrapped output, got " .. #c.lines .. " lines")
+      -- Line 1 should have Special highlight for "- " at correct position
+      local hls = hl_for_line(c, 0)
+      local special_hl = nil
+      local string_hl = nil
+      for _, hl in ipairs(hls) do
+        if hl.hl == "Special" then
+          special_hl = hl
+        end
+        if hl.hl == "String" and not string_hl then
+          string_hl = hl
+        end
+      end
+      assert.is_not_nil(special_hl, "Expected Special highlight for list marker")
+      assert.is_not_nil(string_hl, "Expected String highlight for inline code")
+      -- Special and String highlights should NOT overlap
+      assert.is_true(
+        string_hl.col >= special_hl.end_col,
+        "String highlight (col=" .. string_hl.col .. ") should not overlap with Special (end_col=" .. special_hl.end_col .. ")"
+      )
+    end)
   end)
 
   ---------------------------------------------------------------------------
@@ -456,6 +484,34 @@ describe("Markdown Preview content rendering", function()
         "some text",
       }
       assert.is_falsy(c.lines[1]:match "Properties")
+    end)
+
+    it("should truncate long frontmatter values", function()
+      local long_value = string.rep("a", 100)
+      local c = md_preview.build_content({
+        "---",
+        "aliases: " .. long_value,
+        "---",
+        "Body text",
+      }, { max_width = 40 })
+      -- Properties header + aliases line + blank + body
+      local aliases_line = c.lines[2]
+      assert.is_truthy(aliases_line:match "aliases")
+      assert.is_truthy(aliases_line:match "…$", "Expected truncation ellipsis")
+      local display_width = vim.fn.strdisplaywidth(aliases_line)
+      assert.is_true(display_width <= 40, "Expected truncated line width <= 40, got " .. display_width)
+    end)
+
+    it("should not truncate short frontmatter values", function()
+      local c = md_preview.build_content({
+        "---",
+        "title: Short",
+        "---",
+        "Body text",
+      }, { max_width = 80 })
+      local title_line = c.lines[2]
+      assert.is_truthy(title_line:match "Short")
+      assert.is_falsy(title_line:match "…")
     end)
   end)
 end)

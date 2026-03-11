@@ -377,7 +377,7 @@ local function distribute_highlights(md_highlights, wrapped_lines, line_starts, 
     local line_start_pos = line_starts[idx]
     local prefix_len = #quote_prefix + list_prefix_len
     local line_prefix = (quote_prefix ~= "" and (indent .. quote_prefix) or indent)
-        .. (idx == 1 and "" or string.rep(" ", list_prefix_len))
+        .. string.rep(" ", list_prefix_len)
     local line_hls = {}
 
     -- Add FloatBorder highlight for blockquote prefix on continuation lines
@@ -446,7 +446,7 @@ local function distribute_links(md_links, wrapped_lines, line_starts, indent, qu
   for idx, wline in ipairs(wrapped_lines) do
     local line_start_pos = line_starts[idx]
     local line_prefix = (quote_prefix ~= "" and (indent .. quote_prefix) or indent)
-        .. (idx == 1 and "" or string.rep(" ", list_prefix_len))
+        .. string.rep(" ", list_prefix_len)
 
     for _, link in ipairs(md_links) do
       local link_start = link.col_start - content_offset
