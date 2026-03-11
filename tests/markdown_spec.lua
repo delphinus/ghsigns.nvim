@@ -331,6 +331,60 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Wikilinks", function()
+    it("should render simple wikilink", function()
+      local text, highlights, links = markdown.render("See [[my page]]")
+      eq("See my page", text)
+      local hl = nil
+      for _, h in ipairs(highlights) do
+        if h.hl == "Underlined" then
+          hl = h
+          break
+        end
+      end
+      assert.is_not_nil(hl)
+      eq("my page", text:sub(hl.col + 1, hl.end_col))
+      eq(1, #links)
+      eq("obsidian://open?file=my page", links[1].url)
+    end)
+
+    it("should render wikilink with display text", function()
+      local text = markdown.render("See [[target|shown text]]")
+      eq("See shown text", text)
+    end)
+
+    it("should render wikilink with heading", function()
+      local text = markdown.render("See [[page#section]]")
+      eq("See page > section", text)
+    end)
+
+    it("should render wikilink with heading and display text", function()
+      local text = markdown.render("See [[page#section|custom]]")
+      eq("See custom", text)
+    end)
+
+    it("should render same-file heading link", function()
+      local text = markdown.render("See [[#heading]]")
+      eq("See heading", text)
+    end)
+
+    it("should not match single brackets", function()
+      local text = markdown.render("array[0] and list[1]")
+      eq("array[0] and list[1]", text)
+    end)
+
+    it("should handle unclosed wikilink", function()
+      local text = markdown.render("See [[unclosed")
+      eq("See [[unclosed", text)
+    end)
+
+    it("should handle multiple wikilinks", function()
+      local text, _, links = markdown.render("See [[page1]] and [[page2]]")
+      eq("See page1 and page2", text)
+      eq(2, #links)
+    end)
+  end)
+
   describe("Blockquote", function()
     it("should replace > prefix with visual bar", function()
       local text, highlights, links, special_type = markdown.render("> Quoted text")

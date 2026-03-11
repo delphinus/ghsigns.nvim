@@ -148,6 +148,63 @@ local function process_code_markers(text, hl_group, highlights, links)
   return processed
 end
 
+--- Process [[wikilinks]]: display as link text with highlight
+---@param text string
+---@param highlights Ghsigns.Markdown.Highlight[]
+---@param links Ghsigns.Markdown.Link[]
+---@return string processed
+local function process_wikilinks(text, highlights, links)
+  local processed = ""
+  local i = 1
+
+  while i <= #text do
+    if text:sub(i, i + 1) == "[[" then
+      local close = text:find("]]", i + 2, true)
+      if close then
+        local inner = text:sub(i + 2, close - 1)
+        local display, target
+
+        local pipe_pos = inner:find("|", 1, true)
+        if pipe_pos then
+          target = inner:sub(1, pipe_pos - 1)
+          display = inner:sub(pipe_pos + 1)
+        else
+          target = inner
+          local heading = inner:match "^#(.+)$"
+          if heading then
+            display = heading
+          else
+            local page, h = inner:match "^(.+)#(.+)$"
+            if page and h then
+              display = page .. " > " .. h
+            else
+              display = inner
+            end
+          end
+        end
+
+        local start_col = #processed
+        processed = processed .. display
+        table.insert(highlights, { col = start_col, end_col = start_col + #display, hl = "Underlined" })
+        table.insert(links, {
+          col_start = start_col,
+          col_end = start_col + #display,
+          url = "obsidian://open?file=" .. target,
+        })
+        i = close + 2
+      else
+        processed = processed .. text:sub(i, i)
+        i = i + 1
+      end
+    else
+      processed = processed .. text:sub(i, i)
+      i = i + 1
+    end
+  end
+
+  return processed
+end
+
 --- Process [text](url) links: remove markers and produce highlight/link entries
 ---@param text string
 ---@param highlights Ghsigns.Markdown.Highlight[]
@@ -433,7 +490,8 @@ Markdown.render = function(text, repo_base_url, autolinks)
   -- Remove Obsidian inline comments (%%...%%)
   rendered_text = rendered_text:gsub("%%%%(.-)%%%%", "")
 
-  -- Process inline elements
+  -- Process inline elements (wikilinks before standard links)
+  rendered_text = process_wikilinks(rendered_text, highlights, links)
   rendered_text = process_links(rendered_text, highlights, links)
   rendered_text = process_bare_urls(rendered_text, MAX_URL_DISPLAY_WIDTH, highlights, links)
   if repo_base_url then
