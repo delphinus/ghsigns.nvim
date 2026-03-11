@@ -199,6 +199,13 @@ Code blocks inside callouts: ~
     with the blockquote bar prefix, String highlight, and treesitter
     syntax highlighting (when available).
 
+Expandable truncated content: ~
+
+    Code block lines and table cells that exceed the display width are
+    truncated with an underlined `…` indicator.  Click any line in a
+    truncated block to expand and view the full content via horizontal
+    scrolling.  Click again to collapse back to the truncated view.
+
     Lines exceeding 80 characters are wrapped at word boundaries with
     CJK/fullwidth character support.  The full PR description is shown
     by default.  You can limit the number of lines by passing

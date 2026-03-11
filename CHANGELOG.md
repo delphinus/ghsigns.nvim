@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.14.0] - 2026-03-11
+
+### Added
+
+- **Expandable code blocks and tables**: click the underlined `…` on truncated lines to expand and see full content via horizontal scrolling; click again to collapse
+- Updated `show_demo()` with demonstrations for all new features
+
+### Fixed
+
+- Callout fold toggle not working in PR display (local variable scoping bug)
+
 ## [1.13.0] - 2026-03-11
 
 ### Added
