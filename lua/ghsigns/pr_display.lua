@@ -27,6 +27,16 @@ local ALERT_HL_BASES = {
   Important = "Special",
   Warning = "DiagnosticWarn",
   Caution = "DiagnosticError",
+  -- Obsidian additional types
+  Abstract = "DiagnosticHint",
+  Todo = "DiagnosticInfo",
+  Success = "DiagnosticOk",
+  Question = "DiagnosticWarn",
+  Failure = "DiagnosticError",
+  Danger = "DiagnosticError",
+  Bug = "DiagnosticError",
+  Example = "Special",
+  Quote = "Comment",
 }
 
 --- Build PR content for display (extracted for testability)
