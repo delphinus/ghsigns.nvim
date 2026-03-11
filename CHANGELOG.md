@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.16.1] - 2026-03-11
+
+### Fixed
+
+- **Removed unnecessary `read:project` scope requirement**: stripped unused PR fields (`projectCards`, `projectItems`, and 25 others) from `gh pr view` requests, eliminating the need for `gh auth refresh -s read:project`
+
 ## [1.16.0] - 2026-03-11
 
 ### Added
