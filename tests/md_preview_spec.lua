@@ -374,4 +374,88 @@ describe("Markdown Preview content rendering", function()
       assert.is_truthy(all_text:match "visible after code")
     end)
   end)
+
+  describe("Frontmatter", function()
+    it("should render frontmatter as Properties section", function()
+      local c = md_preview.build_content {
+        "---",
+        "title: My Document",
+        "date: 2026-03-04",
+        "---",
+        "# Hello",
+      }
+      eq("  Properties", c.lines[1])
+      assert.is_truthy(c.lines[2]:match "title")
+      assert.is_truthy(c.lines[2]:match "My Document")
+      assert.is_truthy(c.lines[3]:match "date")
+      assert.is_truthy(c.lines[3]:match "2026%-03%-04")
+      eq("", c.lines[4])
+      assert.is_truthy(c.lines[5]:match "Hello")
+    end)
+
+    it("should render list values as comma-separated", function()
+      local c = md_preview.build_content {
+        "---",
+        "tags:",
+        "  - foo",
+        "  - bar",
+        "  - baz",
+        "---",
+        "Body text",
+      }
+      assert.is_truthy(c.lines[2]:match "foo, bar, baz")
+    end)
+
+    it("should skip empty frontmatter", function()
+      local c = md_preview.build_content {
+        "---",
+        "---",
+        "Body text",
+      }
+      assert.is_truthy(c.lines[1]:match "Body text")
+    end)
+
+    it("should handle no frontmatter", function()
+      local c = md_preview.build_content {
+        "# No frontmatter",
+        "Just text",
+      }
+      assert.is_truthy(c.lines[1]:match "No frontmatter")
+    end)
+
+    it("should not treat --- in body as frontmatter", function()
+      local c = md_preview.build_content {
+        "# Title",
+        "---",
+        "Body text",
+      }
+      assert.is_truthy(c.lines[1]:match "Title")
+    end)
+
+    it("should have Title highlight on Properties heading", function()
+      local c = md_preview.build_content {
+        "---",
+        "key: value",
+        "---",
+      }
+      local groups = hl_for_line(c, 0)
+      assert.is_not_nil(groups)
+      local found = false
+      for _, g in ipairs(groups) do
+        if g.hl == "Title" then
+          found = true
+        end
+      end
+      assert.is_true(found, "Expected Title highlight on Properties line")
+    end)
+
+    it("should handle unclosed frontmatter as regular content", function()
+      local c = md_preview.build_content {
+        "---",
+        "key: value",
+        "some text",
+      }
+      assert.is_falsy(c.lines[1]:match "Properties")
+    end)
+  end)
 end)

@@ -11,11 +11,78 @@ local MdPreview = {}
 ---@param lines string[]
 ---@param opts? { max_width?: integer }
 ---@return Ghsigns.PrContent
+--- Parse simple YAML frontmatter lines into key-value pairs
+---@param fm_lines string[]
+---@return {key: string, value: string}[]
+local function parse_frontmatter(fm_lines)
+  local entries = {}
+  local current_key = nil
+  local current_list = {}
+
+  local function flush_list()
+    if current_key and #current_list > 0 then
+      table.insert(entries, {
+        key = current_key,
+        value = table.concat(current_list, ", "),
+      })
+      current_key = nil
+      current_list = {}
+    end
+  end
+
+  for _, line in ipairs(fm_lines) do
+    local list_value = line:match "^%s+%-%s+(.+)$"
+    if list_value and current_key then
+      table.insert(current_list, list_value)
+    else
+      flush_list()
+      local key, value = line:match "^([%w_%-]+):%s*(.*)$"
+      if key then
+        if value and value ~= "" then
+          table.insert(entries, { key = key, value = value })
+          current_key = nil
+        else
+          current_key = key
+          current_list = {}
+        end
+      end
+    end
+  end
+  flush_list()
+
+  return entries
+end
+
 MdPreview.build_content = function(lines, opts)
   opts = opts or {}
   local max_width = opts.max_width or 80
 
   local b = ContentBuilder.new()
+
+  -- Detect and extract frontmatter
+  local body_start = 1
+  if lines[1] and lines[1]:match "^%-%-%-$" then
+    local frontmatter_lines = {}
+    for i = 2, #lines do
+      if lines[i]:match "^%-%-%-$" then
+        body_start = i + 1
+        break
+      end
+      table.insert(frontmatter_lines, lines[i])
+    end
+    if body_start > 1 and #frontmatter_lines > 0 then
+      local entries = parse_frontmatter(frontmatter_lines)
+      if #entries > 0 then
+        b:add_line("  Properties", {
+          { col = 2, end_col = 2 + #"Properties", hl = "Title" },
+        })
+        for _, entry in ipairs(entries) do
+          b:add_labeled("  " .. entry.key, entry.value, "String")
+        end
+        b:add_line ""
+      end
+    end
+  end
 
   local in_code_block = false
   local code_block_lang = nil
@@ -34,7 +101,8 @@ MdPreview.build_content = function(lines, opts)
     end
   end
 
-  for _, line in ipairs(lines) do
+  for i = body_start, #lines do
+    local line = lines[i]
     local is_blank = line:match "^%s*$" ~= nil
     local is_heading = (not in_code_block) and line:match "^#+%s+" ~= nil
     local is_table_line = (not in_code_block) and line:match "^%s*|" ~= nil
