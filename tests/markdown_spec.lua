@@ -309,6 +309,28 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Inline comments", function()
+    it("should remove inline comments", function()
+      local text = markdown.render("visible %%hidden%% text")
+      eq("visible  text", text)
+    end)
+
+    it("should handle %% without closing pair", function()
+      local text = markdown.render("this has %% but no close")
+      eq("this has %% but no close", text)
+    end)
+
+    it("should remove multiple inline comments", function()
+      local text = markdown.render("a %%b%% c %%d%% e")
+      eq("a  c  e", text)
+    end)
+
+    it("should not affect single %", function()
+      local text = markdown.render("100% done")
+      eq("100% done", text)
+    end)
+  end)
+
   describe("Blockquote", function()
     it("should replace > prefix with visual bar", function()
       local text, highlights, links, special_type = markdown.render("> Quoted text")

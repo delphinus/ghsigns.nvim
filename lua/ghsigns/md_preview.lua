@@ -24,6 +24,7 @@ MdPreview.build_content = function(lines, opts)
   local prev_was_blank = false
   local table_buf = {}
   local lines_shown = 0
+  local in_comment_block = false
 
   --- Flush accumulated table lines
   local function flush_table()
@@ -37,6 +38,15 @@ MdPreview.build_content = function(lines, opts)
     local is_blank = line:match "^%s*$" ~= nil
     local is_heading = (not in_code_block) and line:match "^#+%s+" ~= nil
     local is_table_line = (not in_code_block) and line:match "^%s*|" ~= nil
+
+    -- Toggle Obsidian block comment (outside code blocks)
+    if not in_code_block and line:match "^%s*%%%%%s*$" then
+      in_comment_block = not in_comment_block
+      goto continue
+    end
+    if in_comment_block then
+      goto continue
+    end
 
     -- Accumulate table lines
     if is_table_line then

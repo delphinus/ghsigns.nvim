@@ -397,6 +397,9 @@ Markdown.render = function(text, repo_base_url, autolinks)
   local list_marker = rendered_text:match "^(%s*[-*]%s)"
     or rendered_text:match "^(%s*%d+%.%s)"
 
+  -- Remove Obsidian inline comments (%%...%%)
+  rendered_text = rendered_text:gsub("%%%%(.-)%%%%", "")
+
   -- Process inline elements
   rendered_text = process_links(rendered_text, highlights, links)
   rendered_text = process_bare_urls(rendered_text, MAX_URL_DISPLAY_WIDTH, highlights, links)
