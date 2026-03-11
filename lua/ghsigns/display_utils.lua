@@ -55,10 +55,17 @@ end
 ---@param content Ghsigns.PrContent
 function M.apply_treesitter_highlights(buf, ns, content)
   for _, block in ipairs(content.code_blocks or {}) do
-    local code_lines = {}
-    for i = block.start_line, block.end_line do
-      local line = content.lines[i + 1] or ""
-      table.insert(code_lines, line:sub(3)) -- remove "  " indent
+    local prefix_len = block.prefix_len or 2
+    local code_lines
+    if block.source_lines then
+      -- Use original non-truncated lines for accurate treesitter parsing
+      code_lines = block.source_lines
+    else
+      code_lines = {}
+      for i = block.start_line, block.end_line do
+        local line = content.lines[i + 1] or ""
+        table.insert(code_lines, line:sub(prefix_len + 1))
+      end
     end
     local code_text = table.concat(code_lines, "\n")
 
@@ -74,12 +81,37 @@ function M.apply_treesitter_highlights(buf, ns, content)
     for id, node in query:iter_captures(trees[1]:root(), code_text) do
       local name = query.captures[id]
       local sr, sc, er, ec = node:range()
-      pcall(vim.api.nvim_buf_set_extmark, buf, ns, block.start_line + sr, sc + 2, {
-        end_row = block.start_line + er,
-        end_col = ec + 2,
+      local buf_sr = block.start_line + sr
+      local buf_sc = sc + prefix_len
+      local buf_er = block.start_line + er
+      local buf_ec = ec + prefix_len
+
+      -- Clamp to actual line lengths to handle truncated lines correctly.
+      -- Treesitter computes column positions from full source text, but the
+      -- buffer may contain truncated lines. Without clamping, highlights
+      -- that start beyond a truncation point bleed into the visible portion.
+      local start_line_text = content.lines[buf_sr + 1]
+      if start_line_text and buf_sc > #start_line_text then
+        if buf_sr == buf_er then
+          goto skip_capture -- single-line highlight entirely beyond truncation
+        end
+        -- Multi-line: start from the next line at the content boundary
+        buf_sr = buf_sr + 1
+        buf_sc = prefix_len
+      end
+
+      local end_line_text = content.lines[buf_er + 1]
+      if end_line_text and buf_ec > #end_line_text then
+        buf_ec = #end_line_text
+      end
+
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns, buf_sr, buf_sc, {
+        end_row = buf_er,
+        end_col = buf_ec,
         hl_group = "@" .. name .. "." .. block.language,
         priority = 4200,
       })
+      ::skip_capture::
     end
 
     ::continue::
@@ -203,10 +235,14 @@ end
 ---@param win integer
 ---@param content Ghsigns.PrContent
 ---@param float_win Ghsigns.FloatWin
----@param opts? { close_line_idx?: integer }
+---@param opts? { close_line_idx?: integer, on_fold_toggle?: fun(source_line: integer, collapsed: boolean), get_content?: fun(): Ghsigns.PrContent }
 function M.setup_float_keymaps(buf, ns, win, content, float_win, opts)
   opts = opts or {}
   local close_line_idx = opts.close_line_idx
+  local on_fold_toggle = opts.on_fold_toggle
+  local get_content = opts.get_content or function()
+    return content
+  end
 
   local close_keys = { "q", "<Esc>", "<CR>" }
   for _, key in ipairs(close_keys) do
@@ -219,6 +255,18 @@ function M.setup_float_keymaps(buf, ns, win, content, float_win, opts)
       if close_line_idx and mouse.line == close_line_idx + 1 then
         float_win:close_if_valid()
         return
+      end
+
+      -- Check for foldable callout header click
+      local cur_content = get_content()
+      if on_fold_toggle and cur_content.callout_folds then
+        local click_line = mouse.line - 1 -- 0-indexed
+        for _, fold in ipairs(cur_content.callout_folds) do
+          if fold.header_line == click_line then
+            on_fold_toggle(fold.source_line, not fold.collapsed)
+            return
+          end
+        end
       end
 
       -- In OSC 8 terminals, the terminal handles link clicks natively.
