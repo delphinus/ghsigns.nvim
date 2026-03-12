@@ -263,6 +263,15 @@ PrDisplay.show_demo = function()
     "| Code in callouts | Treesitter highlighting inside `> ```lang` blocks | Implemented |",
     "| Expandable blocks | Click underlined `…` to show full truncated content | Implemented |",
     "",
+    "### 日本語の折り返しと禁則処理",
+    "",
+    "テキストの折り返し時に、句読点が次の行の先頭に送られないようにする処理が禁則処理。この行では句点と一緒に直前の文字も次の行に送られています。",
+    "",
+    "また開き括弧が折り返し位置の付近にある場合は次の行の先頭に送る処理も実施される「行末禁則」と呼ばれています。",
+    "",
+    "> [!NOTE] 日本語のコールアウト",
+    "> コールアウト内で句読点が折返し位置の直後にある場合は前の行に戻す禁則処理が有効。確認しましょう。",
+    "",
     "Obsidian ==highlight== markers and `%%hidden comments%%` are also supported.",
   }, "\n")
 
