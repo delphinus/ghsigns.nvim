@@ -161,7 +161,8 @@ Markdown rendering: ~
     - Strikethrough (`~~text~~`)   |DiagnosticDeprecated| highlight
     - Issue references (`#123`)    |Underlined|, clickable link to GitHub
     - Unordered lists (`- item`)   |Special| marker highlight
-    - Ordered lists (`1. item`)    |Special| marker highlight
+    - Ordered lists (`1. item`)    |Special| marker highlight,
+                                   auto-renumbered per CommonMark
     - Blockquotes (`> text`)       FloatBorder prefix, supports nesting
     - GitHub Alerts (`> [!NOTE]`)  Icon + colored border + tinted background
     - Code blocks with language    Treesitter syntax highlighting

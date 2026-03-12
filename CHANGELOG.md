@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.17.1] - 2026-03-12
+
+### Fixed
+
+- **Ordered list renumbering**: ordered list items are now renumbered sequentially following CommonMark rules (e.g. `1. 1. 1.` renders as `1. 2. 3.`); the first item's number determines the start
+- **Blockquote prefix extraction**: fixed a byte-level Lua pattern `[│ ]+` that incorrectly consumed the leading byte (`0xE2`) of subsequent multibyte characters (e.g. `❝`), causing `<e2>` artifacts on wrapped callout header lines
+
 ## [1.17.0] - 2026-03-11
 
 ### Added
