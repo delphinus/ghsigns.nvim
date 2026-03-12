@@ -215,6 +215,21 @@ Expandable truncated content: ~
     by default.  You can limit the number of lines by passing
     `max_body_lines` to |ghsigns-api-pr-display|.
 
+Kinsoku line-breaking (JIS X 4051): ~
+
+    Japanese text wrapping applies kinsoku (禁則処理) rules based on
+    JIS X 4051 character classes:
+
+    - Line-start prohibited (行頭禁則): closing brackets (」』）etc.),
+      punctuation (。、), small kana (ぁぃぅ etc.), prolonged sound
+      mark (ー), iteration marks (々ゝ etc.), and hyphens (‐〜)
+    - Line-end prohibited (行末禁則): opening brackets (「『（etc.)
+
+    The 追い出し (push-out) strategy is used: when a prohibited
+    character would appear at the start of a line, the preceding
+    character is pushed to the next line together, keeping all lines
+    within `max_width`.
+
 Link handling: ~
 
     In terminals that support OSC 8 hyperlinks (iTerm2, WezTerm, kitty,
