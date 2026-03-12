@@ -301,6 +301,17 @@ describe("Markdown Preview content rendering", function()
       eq("  1. First", c.lines[1])
       eq("  2. Second", c.lines[2])
     end)
+
+    it("should renumber all-1 ordered list items sequentially", function()
+      local c = md_preview.build_content {
+        "1. First",
+        "1. Second",
+        "1. Third",
+      }
+      eq("  1. First", c.lines[1])
+      eq("  2. Second", c.lines[2])
+      eq("  3. Third", c.lines[3])
+    end)
   end)
 
   ---------------------------------------------------------------------------

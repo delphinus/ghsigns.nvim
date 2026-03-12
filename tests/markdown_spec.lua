@@ -247,6 +247,43 @@ describe("Markdown rendering", function()
     end)
   end)
 
+  describe("Ordered list renumbering", function()
+    it("should renumber all-1 ordered list items sequentially", function()
+      local result = markdown.renumber_ordered_lists { "1. a", "1. b", "1. c" }
+      eq({ "1. a", "2. b", "3. c" }, result)
+    end)
+
+    it("should preserve already correct numbers", function()
+      local result = markdown.renumber_ordered_lists { "1. a", "2. b", "3. c" }
+      eq({ "1. a", "2. b", "3. c" }, result)
+    end)
+
+    it("should start from the first item number", function()
+      local result = markdown.renumber_ordered_lists { "3. a", "1. b", "1. c" }
+      eq({ "3. a", "4. b", "5. c" }, result)
+    end)
+
+    it("should handle nested lists", function()
+      local result = markdown.renumber_ordered_lists { "1. outer", "  1. inner", "  1. inner2", "1. outer2" }
+      eq({ "1. outer", "  1. inner", "  2. inner2", "2. outer2" }, result)
+    end)
+
+    it("should reset counter after non-list non-blank line", function()
+      local result = markdown.renumber_ordered_lists { "1. a", "1. b", "paragraph", "1. c", "1. d" }
+      eq({ "1. a", "2. b", "paragraph", "1. c", "2. d" }, result)
+    end)
+
+    it("should not reset counter on blank lines", function()
+      local result = markdown.renumber_ordered_lists { "1. a", "1. b", "", "1. c" }
+      eq({ "1. a", "2. b", "", "3. c" }, result)
+    end)
+
+    it("should handle blockquote-prefixed ordered lists", function()
+      local result = markdown.renumber_ordered_lists { "> 1. a", "> 1. b", "> 1. c" }
+      eq({ "> 1. a", "> 2. b", "> 3. c" }, result)
+    end)
+  end)
+
   describe("Strikethrough", function()
     it("should remove ~~ markers from strikethrough text", function()
       local text, highlights = markdown.render("This is ~~removed~~ text")
