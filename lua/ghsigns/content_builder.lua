@@ -266,6 +266,48 @@ function ContentBuilder:build_header(p)
   return title_line, title_text
 end
 
+--- Characters that must not appear at the start of a line (JIS X 4051 行頭禁則文字).
+---@type table<string, true>
+local NO_BREAK_START = {}
+for _, ch in ipairs {
+  -- Cl.02 終わり括弧類
+  "）", "〕", "］", "｝", "〉", "》", "」", "』", "】", "｠", "〙", "〗", "»",
+  -- Cl.03 ハイフン類
+  "‐", "〜",
+  -- Cl.04 区切り約物
+  "！", "？", "‼", "⁇", "⁈", "⁉",
+  -- Cl.05 中点類
+  "・", "：", "；",
+  -- Cl.06 句点類
+  "。", "．",
+  -- Cl.07 読点類
+  "、", "，",
+  -- Cl.08 繰返し記号
+  "ゝ", "ゞ", "ヽ", "ヾ", "々", "〻",
+  -- Cl.09 長音記号
+  "ー",
+  -- Cl.10 小書きの仮名
+  "ぁ", "ぃ", "ぅ", "ぇ", "ぉ", "っ", "ゃ", "ゅ", "ょ", "ゎ", "ゕ", "ゖ",
+  "ァ", "ィ", "ゥ", "ェ", "ォ", "ッ", "ャ", "ュ", "ョ", "ヮ", "ヵ", "ヶ",
+  "ㇰ", "ㇱ", "ㇲ", "ㇳ", "ㇴ", "ㇵ", "ㇶ", "ㇷ", "ㇸ", "ㇹ", "ㇺ", "ㇻ", "ㇼ", "ㇽ", "ㇾ", "ㇿ",
+  -- 半角カタカナ
+  "｡", "､", "｣", "ｧ", "ｨ", "ｩ", "ｪ", "ｫ", "ｯ", "ｬ", "ｭ", "ｮ", "ｰ",
+} do
+  NO_BREAK_START[ch] = true
+end
+
+--- Characters that must not appear at the end of a line (JIS X 4051 行末禁則文字).
+---@type table<string, true>
+local NO_BREAK_END = {}
+for _, ch in ipairs {
+  -- Cl.01 始め括弧類
+  "（", "〔", "［", "｛", "〈", "《", "「", "『", "【", "｟", "〘", "〖", "«",
+  -- 半角カタカナ
+  "｢",
+} do
+  NO_BREAK_END[ch] = true
+end
+
 --- Split text into segments for wrapping, handling CJK/fullwidth characters individually.
 --- Each CJK/fullwidth character becomes its own segment so it can be wrapped independently.
 ---@param text string
@@ -315,6 +357,8 @@ end
 
 --- Wrap text into lines at word boundaries, tracking original positions.
 --- Uses segment-based splitting to handle CJK/fullwidth characters correctly.
+--- Applies kinsoku (JIS X 4051) rules using 追い出し (push-out) strategy:
+--- characters are pushed to the next line to keep lines within max_width.
 ---@param text string The text to wrap
 ---@param max_width integer Maximum display width per line
 ---@return string[] wrapped_lines
@@ -326,17 +370,64 @@ local function wrap_words(text, max_width)
   local current_width = 0
   local current_start = 0
 
-  for _, seg in ipairs(split_segments(text)) do
+  -- For kinsoku 追い出し: track state before the last segment was appended
+  local prev_current = ""
+  local prev_width = 0
+  local last_seg_text = ""
+  local last_seg_pos = 0
+
+  local segments = split_segments(text)
+
+  for i, seg in ipairs(segments) do
     local seg_width = vim.fn.strdisplaywidth(seg.text)
     local space_width = (seg.has_leading_space and current ~= "") and 1 or 0
 
     if current_width + space_width + seg_width > max_width and current ~= "" then
-      table.insert(wrapped_lines, current)
-      table.insert(line_starts, current_start)
-      current = seg.text
-      current_start = seg.byte_pos
-      current_width = seg_width
+      -- Kinsoku 追い出し: if this segment is a no-break-start char,
+      -- push the last segment of the current line to the next line too
+      if NO_BREAK_START[seg.text] and prev_current ~= "" then
+        table.insert(wrapped_lines, prev_current)
+        table.insert(line_starts, current_start)
+        current = last_seg_text .. seg.text
+        current_start = last_seg_pos
+        current_width = vim.fn.strdisplaywidth(current)
+      else
+        table.insert(wrapped_lines, current)
+        table.insert(line_starts, current_start)
+        current = seg.text
+        current_start = seg.byte_pos
+        current_width = seg_width
+      end
+      prev_current = ""
+      prev_width = 0
+      last_seg_text = ""
+      last_seg_pos = 0
     else
+      -- Kinsoku: if this is a no-break-end char at the end of a full line,
+      -- break before it so it doesn't sit at line end
+      if NO_BREAK_END[seg.text] and current ~= "" then
+        local next_seg = segments[i + 1]
+        local next_width = next_seg and vim.fn.strdisplaywidth(next_seg.text) or 0
+        if current_width + space_width + seg_width + next_width > max_width then
+          table.insert(wrapped_lines, current)
+          table.insert(line_starts, current_start)
+          current = seg.text
+          current_start = seg.byte_pos
+          current_width = seg_width
+          prev_current = ""
+          prev_width = 0
+          last_seg_text = ""
+          last_seg_pos = 0
+          goto continue
+        end
+      end
+
+      -- Save state before appending (for potential 追い出し on the next segment)
+      prev_current = current
+      prev_width = current_width
+      last_seg_text = seg.text
+      last_seg_pos = seg.byte_pos
+
       if current ~= "" then
         if space_width > 0 then
           current = current .. " " .. seg.text
@@ -351,6 +442,7 @@ local function wrap_words(text, max_width)
         current_width = seg_width
       end
     end
+    ::continue::
   end
 
   if current ~= "" then
