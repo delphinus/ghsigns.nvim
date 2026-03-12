@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.18.0] - 2026-03-12
+
+### Added
+
+- **Kinsoku line-breaking (JIS X 4051)**: Japanese text wrapping now applies kinsoku (禁則処理) rules — closing brackets, punctuation, small kana, prolonged sound marks, and iteration marks are prevented from starting a line, while opening brackets are prevented from ending a line
+- Uses the 追い出し (push-out) strategy so that lines never exceed `max_width`, keeping the floating window width constant
+- Added Japanese kinsoku demo text to `show_demo()`
+
 ## [1.17.1] - 2026-03-12
 
 ### Fixed
