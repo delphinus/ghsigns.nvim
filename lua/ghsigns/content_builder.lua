@@ -598,7 +598,12 @@ function ContentBuilder:add_markdown_line(text, indent, max_width, repo_base_url
 
   local quote_prefix = ""
   if special_type == "blockquote" then
-    quote_prefix = rendered_text:match "^([│ ]+)" or ""
+    local bar_space = "│ " -- U+2502 + space (4 bytes)
+    local pos = 1
+    while rendered_text:sub(pos, pos + #bar_space - 1) == bar_space do
+      pos = pos + #bar_space
+    end
+    quote_prefix = rendered_text:sub(1, pos - 1)
   end
 
   if vim.fn.strdisplaywidth(rendered_text) > max_width then
@@ -726,8 +731,8 @@ function ContentBuilder:build_body(p, opts)
   self:add_line ""
   self:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
 
-  local cleaned_lines = normalize_body(p.body)
   local markdown = require "ghsigns.markdown"
+  local cleaned_lines = markdown.renumber_ordered_lists(normalize_body(p.body))
   local ref_links = markdown.parse_reference_links(cleaned_lines)
   local in_code_block = false
   local code_block_lang = nil

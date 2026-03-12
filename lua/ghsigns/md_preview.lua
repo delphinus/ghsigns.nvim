@@ -58,6 +58,7 @@ MdPreview.build_content = function(lines, opts)
   local max_width = opts.max_width or 80
 
   local markdown = require "ghsigns.markdown"
+  lines = markdown.renumber_ordered_lists(lines)
   local ref_links = markdown.parse_reference_links(lines)
 
   local b = ContentBuilder.new()

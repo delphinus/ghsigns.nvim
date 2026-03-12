@@ -710,4 +710,37 @@ Markdown.is_reference_link_def = function(line)
   return line:match "^%[([^%]]+)%]:%s+" ~= nil
 end
 
+--- Renumber ordered list items following CommonMark rules.
+--- The first item's number determines the start; subsequent items are
+--- numbered sequentially regardless of their source numbers.
+---@param lines string[]
+---@return string[]
+Markdown.renumber_ordered_lists = function(lines)
+  local result = {}
+  -- Stack of { prefix = string, counter = integer } for nested lists
+  local stack = {}
+
+  for _, line in ipairs(lines) do
+    local prefix, num, rest = line:match "^(%s*>?%s*)(%d+)(%.%s.*)$"
+    if prefix and num then
+      -- Pop stack entries deeper than current prefix
+      while #stack > 0 and #stack[#stack].prefix > #prefix do
+        table.remove(stack)
+      end
+      if #stack > 0 and stack[#stack].prefix == prefix then
+        stack[#stack].counter = stack[#stack].counter + 1
+      else
+        table.insert(stack, { prefix = prefix, counter = tonumber(num) })
+      end
+      table.insert(result, prefix .. tostring(stack[#stack].counter) .. rest)
+    else
+      if not line:match "^%s*$" then
+        stack = {}
+      end
+      table.insert(result, line)
+    end
+  end
+  return result
+end
+
 return Markdown
