@@ -5,170 +5,202 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-03-13
+
+### Changed
+
+- extract markdown rendering into md-render.nvim
+
 ## [1.18.0] - 2026-03-12
 
 ### Added
 
-- **Kinsoku line-breaking (JIS X 4051)**: Japanese text wrapping now applies kinsoku (禁則処理) rules — closing brackets, punctuation, small kana, prolonged sound marks, and iteration marks are prevented from starting a line, while opening brackets are prevented from ending a line
-- Uses the 追い出し (push-out) strategy so that lines never exceed `max_width`, keeping the floating window width constant
-- Added Japanese kinsoku demo text to `show_demo()`
+- add kinsoku (JIS X 4051) line-breaking for Japanese text wrapping
+
+### Documentation
+
+- update CHANGELOG and help for v1.18.0
 
 ## [1.17.1] - 2026-03-12
 
+### Documentation
+
+- update CHANGELOG and help for v1.17.1
+
 ### Fixed
 
-- **Ordered list renumbering**: ordered list items are now renumbered sequentially following CommonMark rules (e.g. `1. 1. 1.` renders as `1. 2. 3.`); the first item's number determines the start
-- **Blockquote prefix extraction**: fixed a byte-level Lua pattern `[│ ]+` that incorrectly consumed the leading byte (`0xE2`) of subsequent multibyte characters (e.g. `❝`), causing `<e2>` artifacts on wrapped callout header lines
+- renumber ordered lists per CommonMark and fix blockquote prefix extraction
 
 ## [1.17.0] - 2026-03-11
 
 ### Added
 
-- **Reference-style links**: `[text][ref]` and `[text]` shortcut reference links are now resolved using `[label]: url` definitions in the document; definition lines are hidden from rendered output
-- **Image links**: `[![alt](img-url)](link-url)` patterns now render the alt text as a clickable link to the outer URL, using balanced bracket matching
-- **Setext headings**: lines followed by `===` (h1) or `---` (h2) underlines are now recognized as headings with proper icons and highlights
+- support reference links, image links, and setext headings
+
+### Documentation
+
+- update CHANGELOG and help for v1.17.0
 
 ## [1.16.1] - 2026-03-11
 
 ### Fixed
 
-- **Removed unnecessary `read:project` scope requirement**: stripped unused PR fields (`projectCards`, `projectItems`, and 25 others) from `gh pr view` requests, eliminating the need for `gh auth refresh -s read:project`
+- remove unused PR fields to eliminate read:project scope requirement
 
 ## [1.16.0] - 2026-03-11
 
 ### Added
 
-- **Level-specific heading icons**: headings now display distinct icons per level (◉ ○ ◆ ◇ ▸ ▹ for h1–h6) making heading hierarchy visually clear at a glance
-- **Heading highlight groups**: new `GhsignsH1`–`GhsignsH6` highlight groups that inherit colors from treesitter `@markup.heading.N.markdown` groups (fallback to `Title`)
-- Updated `show_demo()` with h3 subheadings to showcase heading level differentiation
+- level-specific heading icons and improved blank line control
 
-### Fixed
+### Documentation
 
-- **Blank line control around headings**: headings now always have exactly one blank line before them (except at the start of content); blank lines after headings are removed; multiple consecutive blank lines before a heading are collapsed to one
+- update CHANGELOG and help for v1.16.0
 
 ## [1.15.0] - 2026-03-11
 
+### Documentation
+
+- update CHANGELOG for v1.15.0
+
 ### Fixed
 
-- **Frontmatter truncation**: long frontmatter property values in Markdown Preview now truncate at `max_width` with `…` ellipsis, preventing the floating window from becoming too wide
-- **Wrapped list item highlight offset**: inline code highlights on wrapped list items were shifted left by the list marker width (e.g. `Title` showing only `Tit` colored), caused by `distribute_highlights` and `distribute_links` not accounting for `list_prefix_len` on the first wrapped line
-- **List marker visibility on wrapped lines**: list marker `Special` highlight was being overlapped by `String` highlight on the first line of wrapped list items, making them not appear as bullet points
+- truncate long frontmatter values and fix list item highlight offset
 
 ## [1.14.0] - 2026-03-11
 
 ### Added
 
-- **Expandable code blocks and tables**: click the underlined `…` on truncated lines to expand and see full content via horizontal scrolling; click again to collapse
-- Updated `show_demo()` with demonstrations for all new features
+- click-to-expand truncated code blocks and tables
 
-### Fixed
+### Documentation
 
-- Callout fold toggle not working in PR display (local variable scoping bug)
+- update help and CHANGELOG for v1.14.0
 
 ## [1.13.0] - 2026-03-11
 
 ### Added
 
-- **Foldable callouts**: Obsidian-compatible `[!TYPE]+` (default expanded) and `[!TYPE]-` (default collapsed) fold modifiers with click-to-toggle
-- **Code blocks inside callouts**: code fences inside callout bodies are now detected and rendered with blockquote bar prefix and treesitter syntax highlighting
-- **Unknown callout types**: any `[!type]` is now recognized as a callout (rendered with generic ❝ icon and NOTE style)
+- support foldable callouts and code blocks inside callouts
 
-### Fixed
+### Documentation
 
-- Treesitter highlighting on truncated code lines no longer bleeds across truncation boundaries (e.g. heredoc start on a truncated line coloring visible filenames)
-- Treesitter parsing now uses original (non-truncated) source lines, preventing truncation from breaking multi-line syntax like heredocs
+- update help and CHANGELOG for v1.13.0
 
 ## [1.12.0] - 2026-03-11
 
 ### Added
 
-- **Obsidian compatibility**: extended Markdown rendering with Obsidian-specific syntax support
-  - `==highlight==` marker syntax with `GhsignsHighlight` highlight group
-  - `%%comment%%` inline comments (hidden in preview) and `%%` block comments
-  - YAML frontmatter rendered as a "Properties" section in Markdown Preview
-  - 20+ Obsidian callout types (abstract, todo, success, question, failure, danger, bug, example, quote) with aliases
-  - Custom callout titles (`> [!NOTE] Custom Title`) and case-insensitive type matching
-  - `[[wikilink]]` syntax with display text, heading references, and `obsidian://` URI links
-  - `![[embed]]` syntax displayed as link icons (📎 for notes, 🖼 for images)
-- 18 new highlight groups for Obsidian callout types (`GhsignsAlert{Type}` and `GhsignsAlert{Type}Bg`)
+- support ==highlight== marker syntax
+- support %%comment%% syntax for Obsidian
+- render YAML frontmatter as Properties section
+- extend callout types and support custom titles
+- support [[wikilink]] syntax for Obsidian
+- support ![[embed]] syntax for Obsidian
+
+### Documentation
+
+- update help and CHANGELOG for v1.12.0
 
 ## [1.11.0] - 2026-03-04
 
 ### Added
 
-- **Markdown Preview** (experimental): preview the current `.md` buffer in a floating window with the same rendering engine used for PR descriptions (`:lua require("ghsigns.md_preview").show()`)
-- New `display_utils` module extracting shared display utilities (`apply_content_to_buffer`, `open_float_window`, `setup_float_keymaps`, `supports_osc8`) for reuse across PR display and Markdown Preview
+- add Markdown Preview floating window for .md files
 
-### Changed
+### Documentation
 
-- Refactored `pr_display` to delegate shared display logic to `display_utils`
+- update help and CHANGELOG for v1.11.0
 
 ## [1.10.0] - 2026-03-04
 
 ### Added
 
-- GitHub Alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`) are now rendered with type-specific icons, colored borders, and tinted backgrounds instead of plain blockquotes
-- 10 new highlight groups (`GhsignsAlert{Name}` and `GhsignsAlert{Name}Bg`) for alert styling
+- render GitHub Alerts with icons, colored borders, and tinted backgrounds
+
+### Documentation
+
+- update help and CHANGELOG for v1.10.0
 
 ## [1.9.0] - 2026-03-03
 
+### Added
+
+- show full PR description by default instead of truncating
+
 ### Changed
 
-- Show the full PR description by default instead of truncating to 15 lines
-- The `max_body_lines` option remains available to limit display length if needed
+- update tests for full PR body display
+
+### Documentation
+
+- update help and CHANGELOG for v1.9.0
 
 ## [1.8.0] - 2026-02-26
 
-### Changed
+### Added
 
-- Code block lines exceeding the max width are now truncated with "…" instead of wrapped, improving readability in floating windows
-- Normal prose continues to wrap at word boundaries as before
+- truncate long code block lines instead of wrapping
 
-### Updated
+### Documentation
 
-- `show_demo()` now demonstrates both long prose wrapping and code block truncation
+- update CHANGELOG.md for v1.8.0
 
 ## [1.7.0] - 2026-02-25
 
 ### Added
 
-- Autolink references support: ticket IDs (e.g. `JIRA-1234`) in PR descriptions are automatically converted to clickable links
-- Hybrid approach: auto-fetches autolink config from GitHub API with `--hostname` support for GitHub Enterprise, falls back to manual `setup({ autolinks = {...} })` configuration
-- Support for `is_alphanumeric` flag to match alphanumeric or digit-only patterns
-- Autolink references in `show_demo()` for demonstration
-- Autolinks work in markdown body text, tables, and all inline contexts
+- add autolink references support for JIRA/external ticket linking
+
+### Documentation
+
+- update CHANGELOG.md for v1.7.0
 
 ## [1.6.0] - 2026-02-25
 
 ### Added
 
-- Display dates (Created, Updated, Merged) in local timezone with abbreviation (e.g. `2024-01-01 09:00:00 JST`) instead of raw UTC format
+- display dates in local timezone instead of UTC
+
+### Documentation
+
+- update CHANGELOG.md for v1.6.0
 
 ## [1.5.0] - 2026-02-25
 
 ### Added
 
-- Bare URL detection and clickable link support in PR descriptions
-- Long URLs (>50 display columns) are truncated with "…" while preserving full URL for clicks
-- Short bare URLs are displayed as-is with underline highlight and click support
-- Bare URL examples added to `show_demo()`
+- truncate bare URLs while preserving clickable links
+
+### Documentation
+
+- update CHANGELOG.md for v1.5.0
 
 ## [1.4.1] - 2026-02-24
 
+### Documentation
+
+- update CHANGELOG.md for v1.4.1
+
 ### Fixed
 
-- Wide tables now shrink proportionally to fit within 80-character display width
-- Cell content truncated with "…" when columns are narrowed
+- shrink wide tables to fit within max display width
 
 ## [1.4.0] - 2026-02-24
 
 ### Added
 
-- Markdown table rendering in floating window using box-drawing characters (`│`, `─`)
-- Support for column alignment (left/center/right) and inline markdown in table cells
-- New `markdown_table` module with `parse()` and `render()` functions
+- add markdown table rendering in floating window
+
+### Documentation
+
+- update CHANGELOG.md for v1.4.0
 
 ## [1.3.6] - 2026-02-24
+
+### Documentation
+
+- update CHANGELOG.md for v1.3.6
 
 ### Fixed
 
@@ -306,9 +338,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - embed PR #4 body inline instead of reading from /tmp
 - prevent duplicate link opening in OSC 8 terminals
 
+[2.0.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.18.0...v2.0.0
+[1.18.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.17.1...v1.18.0
+[1.17.1]: https://github.com/delphinus/ghsigns.nvim/compare/v1.17.0...v1.17.1
+[1.17.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.16.1...v1.17.0
+[1.16.1]: https://github.com/delphinus/ghsigns.nvim/compare/v1.16.0...v1.16.1
+[1.16.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.15.0...v1.16.0
+[1.15.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.14.0...v1.15.0
+[1.14.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.13.0...v1.14.0
+[1.13.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.7.0...v1.8.0
+[1.7.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.4.1...v1.5.0
+[1.4.1]: https://github.com/delphinus/ghsigns.nvim/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.6...v1.4.0
 [1.3.6]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/delphinus/ghsigns.nvim/compare/v1.3.3...v1.3.4
