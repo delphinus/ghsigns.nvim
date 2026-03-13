@@ -5,11 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-03-13
+
+### Documentation
+
+- add md-render.nvim setup instructions to README
+
 ## [2.0.0] - 2026-03-13
 
 ### Changed
 
 - extract markdown rendering into md-render.nvim
+
+### Documentation
+
+- update CHANGELOG and help for v2.0.0
 
 ## [1.18.0] - 2026-03-12
 
@@ -338,6 +348,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - embed PR #4 body inline instead of reading from /tmp
 - prevent duplicate link opening in OSC 8 terminals
 
+[2.0.1]: https://github.com/delphinus/ghsigns.nvim/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.18.0...v2.0.0
 [1.18.0]: https://github.com/delphinus/ghsigns.nvim/compare/v1.17.1...v1.18.0
 [1.17.1]: https://github.com/delphinus/ghsigns.nvim/compare/v1.17.0...v1.17.1
