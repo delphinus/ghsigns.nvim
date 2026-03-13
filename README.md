@@ -35,7 +35,17 @@ The Lualine component displays the current branch (`calebdw/push-mzxxqywkwszq`),
 - [Neovim](https://neovim.io/) >= 0.9.0
 - [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) (required)
 - [GitHub CLI (`gh`)](https://cli.github.com/) (required)
+- [md-render.nvim](https://github.com/delphinus/md-render.nvim) (optional — see below)
 - [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim) (optional, for statusline integration)
+
+### md-render.nvim (optional)
+
+[md-render.nvim](https://github.com/delphinus/md-render.nvim) is a standalone Markdown rendering engine extracted from this plugin. Installing it enables:
+
+- **PR floating window** — single-click the Lualine component to view PR details with rich Markdown rendering (headings, bold, code, links, tables, GitHub/Obsidian callouts, treesitter syntax highlighting in code blocks, etc.)
+- **Markdown preview** — preview any Markdown file in a floating window via `require("ghsigns.md_preview").show()`
+
+Without md-render.nvim, ghsigns.nvim still works — single-click will open the PR in your browser instead of showing the floating window. All core features (Lualine display, automatic diff base switching, PR caching) remain fully functional.
 
 ## Installation
 
@@ -44,22 +54,10 @@ The Lualine component displays the current branch (`calebdw/push-mzxxqywkwszq`),
 ```lua
 {
   "delphinus/ghsigns.nvim",
+  version = "*",
   dependencies = {
     "lewis6991/gitsigns.nvim",
-  },
-  config = function()
-    require("ghsigns").setup()
-  end,
-}
-```
-
-### Using [packer.nvim](https://github.com/wbthomason/packer.nvim)
-
-```lua
-use {
-  "delphinus/ghsigns.nvim",
-  requires = {
-    "lewis6991/gitsigns.nvim",
+    { "delphinus/md-render.nvim", version = "*" }, -- optional: for PR floating window & Markdown preview
   },
   config = function()
     require("ghsigns").setup()
@@ -230,7 +228,17 @@ Lualine コンポーネントは、現在のブランチ（`calebdw/push-mzxxqyw
 - [Neovim](https://neovim.io/) >= 0.9.0
 - [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)（必須）
 - [GitHub CLI (`gh`)](https://cli.github.com/)（必須）
+- [md-render.nvim](https://github.com/delphinus/md-render.nvim)（オプション — 下記参照）
 - [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim)（オプション、ステータスライン統合用）
+
+### md-render.nvim（オプション）
+
+[md-render.nvim](https://github.com/delphinus/md-render.nvim) はこのプラグインから分離された Markdown レンダリングエンジンです。インストールすると以下の機能が有効になります：
+
+- **PR フローティングウィンドウ** — Lualine コンポーネントをシングルクリックすると、リッチな Markdown レンダリング付きで PR 詳細を表示（見出し、太字、コード、リンク、テーブル、GitHub/Obsidian コールアウト、コードブロック内の treesitter シンタックスハイライトなど）
+- **Markdown プレビュー** — `require("ghsigns.md_preview").show()` で任意の Markdown ファイルをフローティングウィンドウでプレビュー
+
+md-render.nvim がなくても ghsigns.nvim は動作します。その場合、シングルクリックではフローティングウィンドウの代わりにブラウザで PR を開きます。コア機能（Lualine 表示、自動 diff base 切り替え、PR キャッシュ）は全て利用可能です。
 
 ## インストール
 
@@ -239,22 +247,10 @@ Lualine コンポーネントは、現在のブランチ（`calebdw/push-mzxxqyw
 ```lua
 {
   "delphinus/ghsigns.nvim",
+  version = "*",
   dependencies = {
     "lewis6991/gitsigns.nvim",
-  },
-  config = function()
-    require("ghsigns").setup()
-  end,
-}
-```
-
-### [packer.nvim](https://github.com/wbthomason/packer.nvim) を使用
-
-```lua
-use {
-  "delphinus/ghsigns.nvim",
-  requires = {
-    "lewis6991/gitsigns.nvim",
+    { "delphinus/md-render.nvim", version = "*" }, -- オプション: PR フローティングウィンドウ & Markdown プレビュー
   },
   config = function()
     require("ghsigns").setup()
