@@ -5,17 +5,21 @@ describe("Markdown Preview content rendering", function()
 
   before_each(function()
     package.loaded["ghsigns.md_preview"] = nil
-    package.loaded["ghsigns.content_builder"] = nil
-    package.loaded["ghsigns.display_utils"] = nil
-    package.loaded["ghsigns.float_win"] = nil
+    package.loaded["md-render.preview"] = nil
+    package.loaded["md-render.content_builder"] = nil
+    package.loaded["md-render.display_utils"] = nil
+    package.loaded["md-render.float_win"] = nil
+    package.loaded["md-render"] = nil
     md_preview = require "ghsigns.md_preview"
   end)
 
   after_each(function()
     package.loaded["ghsigns.md_preview"] = nil
-    package.loaded["ghsigns.content_builder"] = nil
-    package.loaded["ghsigns.display_utils"] = nil
-    package.loaded["ghsigns.float_win"] = nil
+    package.loaded["md-render.preview"] = nil
+    package.loaded["md-render.content_builder"] = nil
+    package.loaded["md-render.display_utils"] = nil
+    package.loaded["md-render.float_win"] = nil
+    package.loaded["md-render"] = nil
   end)
 
   -- Helper to find highlight groups for a specific line index
@@ -32,18 +36,18 @@ describe("Markdown Preview content rendering", function()
   -- Group 1: Headings
   ---------------------------------------------------------------------------
   describe("Headings", function()
-    it("should render h2 heading with icon and GhsignsH2 highlight", function()
+    it("should render h2 heading with icon and MdRenderH2 highlight", function()
       local c = md_preview.build_content { "## My Heading" }
       eq("  ○ My Heading", c.lines[1])
       local hls = hl_for_line(c, 0)
-      eq("GhsignsH2", hls[1].hl)
+      eq("MdRenderH2", hls[1].hl)
     end)
 
-    it("should render h1 heading with icon and GhsignsH1 highlight", function()
+    it("should render h1 heading with icon and MdRenderH1 highlight", function()
       local c = md_preview.build_content { "# Top Level" }
       eq("  ◉ Top Level", c.lines[1])
       local hls = hl_for_line(c, 0)
-      eq("GhsignsH1", hls[1].hl)
+      eq("MdRenderH1", hls[1].hl)
     end)
 
     it("should auto-insert blank line before headings", function()
@@ -122,7 +126,7 @@ describe("Markdown Preview content rendering", function()
       eq("  ◉ Top Level", c.lines[1])
       eq(1, #c.lines)
       local hls = hl_for_line(c, 0)
-      eq("GhsignsH1", hls[1].hl)
+      eq("MdRenderH1", hls[1].hl)
     end)
 
     it("should render setext h2 with --- underline", function()
@@ -133,7 +137,7 @@ describe("Markdown Preview content rendering", function()
       eq("  ○ License", c.lines[1])
       eq(1, #c.lines)
       local hls = hl_for_line(c, 0)
-      eq("GhsignsH2", hls[1].hl)
+      eq("MdRenderH2", hls[1].hl)
     end)
 
     it("should handle setext headings with surrounding content", function()
