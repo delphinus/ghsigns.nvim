@@ -38,6 +38,8 @@ REQUIREMENTS						*ghsigns-requirements*
 - Neovim >= 0.9.0
 - gitsigns.nvim (https://github.com/lewis6991/gitsigns.nvim) (required)
 - GitHub CLI `gh` (https://cli.github.com/) (required, must be authenticated)
+- md-render.nvim (https://github.com/delphinus/md-render.nvim) (optional,
+  for PR floating window and Markdown preview)
 - lualine.nvim (https://github.com/nvim-lualine/lualine.nvim) (optional)
 
 ==============================================================================
@@ -48,6 +50,7 @@ Using lazy.nvim: >lua
       "delphinus/ghsigns.nvim",
       dependencies = {
         "lewis6991/gitsigns.nvim",
+        "delphinus/md-render.nvim",  -- optional: for PR float & Markdown preview
       },
       config = function()
         require("ghsigns").setup()
@@ -151,7 +154,7 @@ Markdown rendering: ~
 
     The PR description supports the following Markdown elements:
 
-    - Headings (`#`..`######`)     Level-specific icon + GhsignsH* highlight
+    - Headings (`#`..`######`)     Level-specific icon + MdRenderH* highlight
     - Setext headings              `text` + `===`/`---` underline
     - Bold (`**text**`)            |Bold| highlight
     - Inline code (`` `code` ``)   |String| highlight
@@ -344,47 +347,49 @@ The following highlight groups are defined by the plugin:
     *GhsignsPrTitle*
         PR title in the floating window.  Extends |hl-Title| with underline.
 
-    *GhsignsAlertNote*
+The following highlight groups are defined by md-render.nvim:
+
+    *MdRenderAlertNote*
         Border and label for `[!NOTE]` alerts.  Bold, fg from DiagnosticInfo.
-    *GhsignsAlertNoteBg*
+    *MdRenderAlertNoteBg*
         Background for `[!NOTE]` alerts.  10% blend with Normal bg.
-    *GhsignsAlertTip*
+    *MdRenderAlertTip*
         Border and label for `[!TIP]` alerts.  Bold, fg from DiagnosticHint.
-    *GhsignsAlertTipBg*
+    *MdRenderAlertTipBg*
         Background for `[!TIP]` alerts.  10% blend with Normal bg.
-    *GhsignsAlertImportant*
+    *MdRenderAlertImportant*
         Border and label for `[!IMPORTANT]` alerts.  Bold, fg from Special.
-    *GhsignsAlertImportantBg*
+    *MdRenderAlertImportantBg*
         Background for `[!IMPORTANT]` alerts.  10% blend with Normal bg.
-    *GhsignsAlertWarning*
+    *MdRenderAlertWarning*
         Border and label for `[!WARNING]` alerts.  Bold, fg from DiagnosticWarn.
-    *GhsignsAlertWarningBg*
+    *MdRenderAlertWarningBg*
         Background for `[!WARNING]` alerts.  10% blend with Normal bg.
-    *GhsignsAlertCaution*
+    *MdRenderAlertCaution*
         Border and label for `[!CAUTION]` alerts.  Bold, fg from DiagnosticError.
-    *GhsignsAlertCautionBg*
+    *MdRenderAlertCautionBg*
         Background for `[!CAUTION]` alerts.  10% blend with Normal bg.
 
-    *GhsignsAlertAbstract* *GhsignsAlertAbstractBg*
+    *MdRenderAlertAbstract* *MdRenderAlertAbstractBg*
         For `[!ABSTRACT]`, `[!SUMMARY]`, `[!TLDR]`.  fg from DiagnosticHint.
-    *GhsignsAlertTodo* *GhsignsAlertTodoBg*
+    *MdRenderAlertTodo* *MdRenderAlertTodoBg*
         For `[!TODO]`.  fg from DiagnosticInfo.
-    *GhsignsAlertSuccess* *GhsignsAlertSuccessBg*
+    *MdRenderAlertSuccess* *MdRenderAlertSuccessBg*
         For `[!SUCCESS]`, `[!CHECK]`, `[!DONE]`.  fg from DiagnosticOk.
-    *GhsignsAlertQuestion* *GhsignsAlertQuestionBg*
+    *MdRenderAlertQuestion* *MdRenderAlertQuestionBg*
         For `[!QUESTION]`, `[!HELP]`, `[!FAQ]`.  fg from DiagnosticWarn.
-    *GhsignsAlertFailure* *GhsignsAlertFailureBg*
+    *MdRenderAlertFailure* *MdRenderAlertFailureBg*
         For `[!FAILURE]`, `[!FAIL]`, `[!MISSING]`.  fg from DiagnosticError.
-    *GhsignsAlertDanger* *GhsignsAlertDangerBg*
+    *MdRenderAlertDanger* *MdRenderAlertDangerBg*
         For `[!DANGER]`, `[!ERROR]`.  fg from DiagnosticError.
-    *GhsignsAlertBug* *GhsignsAlertBugBg*
+    *MdRenderAlertBug* *MdRenderAlertBugBg*
         For `[!BUG]`.  fg from DiagnosticError.
-    *GhsignsAlertExample* *GhsignsAlertExampleBg*
+    *MdRenderAlertExample* *MdRenderAlertExampleBg*
         For `[!EXAMPLE]`.  fg from Special.
-    *GhsignsAlertQuote* *GhsignsAlertQuoteBg*
+    *MdRenderAlertQuote* *MdRenderAlertQuoteBg*
         For `[!QUOTE]`, `[!CITE]`.  fg from Comment.
 
-    *GhsignsH1* *GhsignsH2* *GhsignsH3* *GhsignsH4* *GhsignsH5* *GhsignsH6*
+    *MdRenderH1* *MdRenderH2* *MdRenderH3* *MdRenderH4* *MdRenderH5* *MdRenderH6*
         Heading highlight groups for levels 1-6.  Each heading is prefixed
         with a level-specific icon:
 
@@ -400,7 +405,7 @@ The following highlight groups are defined by the plugin:
         groups when available, falling back to |hl-Title|.
         Uses `default = true` so users can override.
 
-    *GhsignsHighlight*
+    *MdRenderHighlight*
         Obsidian `==highlight==` marker.  Yellow text on dark yellow bg.
         Uses `default = true` so users can override with their colorscheme.
 
