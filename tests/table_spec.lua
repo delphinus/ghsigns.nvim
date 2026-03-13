@@ -4,14 +4,14 @@ describe("MarkdownTable", function()
   local markdown_table
 
   before_each(function()
-    package.loaded["ghsigns.markdown_table"] = nil
-    package.loaded["ghsigns.markdown"] = nil
-    markdown_table = require "ghsigns.markdown_table"
+    package.loaded["md-render.markdown_table"] = nil
+    package.loaded["md-render.markdown"] = nil
+    markdown_table = require "md-render.markdown_table"
   end)
 
   after_each(function()
-    package.loaded["ghsigns.markdown_table"] = nil
-    package.loaded["ghsigns.markdown"] = nil
+    package.loaded["md-render.markdown_table"] = nil
+    package.loaded["md-render.markdown"] = nil
   end)
 
   ---------------------------------------------------------------------------

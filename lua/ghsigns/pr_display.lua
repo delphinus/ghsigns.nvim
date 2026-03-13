@@ -1,90 +1,255 @@
-local FloatWin = require "ghsigns.float_win"
-local cb = require "ghsigns.content_builder"
-local display_utils = require "ghsigns.display_utils"
-local ContentBuilder = cb.ContentBuilder
-local prepare_pr_data = cb.prepare_pr_data
+local md_render = require "md-render"
+local FloatWin = md_render.FloatWin
+local ContentBuilder = md_render.ContentBuilder
+local display_utils = md_render.display_utils
 
-local float_win = FloatWin.new()
+local float_win = FloatWin.new "ghsigns_pr_float"
 
 local PrDisplay = {}
 
---- Blend two colors by alpha (0.0 = bg, 1.0 = fg)
----@param fg integer foreground color (0xRRGGBB)
----@param bg integer background color (0xRRGGBB)
----@param alpha number blend factor (0.0–1.0)
----@return integer blended color
-local function blend_color(fg, bg, alpha)
-  local r = math.floor(bit.rshift(fg, 16) * alpha + bit.rshift(bg, 16) * (1 - alpha) + 0.5)
-  local g = math.floor(bit.band(bit.rshift(fg, 8), 0xFF) * alpha + bit.band(bit.rshift(bg, 8), 0xFF) * (1 - alpha) + 0.5)
-  local b = math.floor(bit.band(fg, 0xFF) * alpha + bit.band(bg, 0xFF) * (1 - alpha) + 0.5)
-  return bit.lshift(r, 16) + bit.lshift(g, 8) + b
+--- Prepare PR data by deep-copying and extracting author name
+---@param pr Ghsigns.Pr
+---@return Ghsigns.PrData
+local function prepare_pr_data(pr)
+  local p = vim.deepcopy(pr) --[[@as Ghsigns.PrData]]
+  if p.author then
+    p.author_name = (p.author.name and p.author.name ~= "") and p.author.name or (p.author.login or "Unknown")
+  end
+  return p
 end
 
---- Alert type definitions: base highlight group for each alert type
-local ALERT_HL_BASES = {
-  Note = "DiagnosticInfo",
-  Tip = "DiagnosticHint",
-  Important = "Special",
-  Warning = "DiagnosticWarn",
-  Caution = "DiagnosticError",
-  -- Obsidian additional types
-  Abstract = "DiagnosticHint",
-  Todo = "DiagnosticInfo",
-  Success = "DiagnosticOk",
-  Question = "DiagnosticWarn",
-  Failure = "DiagnosticError",
-  Danger = "DiagnosticError",
-  Bug = "DiagnosticError",
-  Example = "Special",
-  Quote = "Comment",
-}
+--- Convert an ISO 8601 UTC timestamp to local time string.
+---@param iso_str string e.g. "2024-01-01T00:00:00Z"
+---@return string e.g. "2024-01-01 09:00:00 JST"
+local function format_local_time(iso_str)
+  local y, m, d, h, min, s = iso_str:match "(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)"
+  if not y then
+    return iso_str
+  end
+  local t = os.time {
+    year = tonumber(y),
+    month = tonumber(m),
+    day = tonumber(d),
+    hour = tonumber(h),
+    min = tonumber(min),
+    sec = tonumber(s),
+  }
+  local ref = os.time()
+  local offset = os.difftime(ref, os.time(os.date("!*t", ref)))
+  return os.date("%Y-%m-%d %H:%M:%S %Z", t + offset)
+end
+
+--- Normalize body text: fix line endings, strip HTML, compress blank lines
+---@param body string
+---@return string[]
+local function normalize_body(body)
+  local text = body:gsub("\r\n", "\n"):gsub("\r", "\n")
+  text = text:gsub("<!%-%-.-%-%->", "")
+  text = text:gsub("<[^>]+>", "")
+
+  local raw_lines = vim.split(text, "\n")
+  local cleaned = {}
+  local prev_blank = false
+  for _, line in ipairs(raw_lines) do
+    local is_blank = line:match "^%s*$" ~= nil
+    if not (is_blank and prev_blank) then
+      table.insert(cleaned, line)
+    end
+    prev_blank = is_blank
+  end
+  return cleaned
+end
+
+--- Add title line with optional DRAFT indicator
+---@param b MdRender.ContentBuilder
+---@param p Ghsigns.PrData
+---@return integer title_line
+---@return string title_text
+local function add_title_line(b, p)
+  local title_prefix = (p.isDraft == true) and "[DRAFT] " or ""
+  local title_text = "#" .. (p.number or 0) .. " " .. title_prefix .. (p.title or "")
+  local number_str = tostring(p.number or 0)
+  local title_hls = {
+    { col = 0, end_col = #number_str + 1, hl = "Number" },
+  }
+  if p.isDraft == true then
+    local draft_start = #number_str + 2
+    table.insert(title_hls, { col = draft_start, end_col = draft_start + 7, hl = "WarningMsg" })
+    table.insert(title_hls, { col = draft_start + 8, end_col = -1, hl = "GhsignsPrTitle" })
+  else
+    table.insert(title_hls, { col = #number_str + 2, end_col = -1, hl = "GhsignsPrTitle" })
+  end
+  b:add_line(title_text, title_hls)
+  return #b.lines - 1, title_text
+end
+
+--- Add changes line with diff-colored highlights
+---@param b MdRender.ContentBuilder
+---@param p Ghsigns.PrData
+local function add_changes_line(b, p)
+  local commit_count = 0
+  if p.commits then
+    if p.commits.nodes then
+      commit_count = #p.commits.nodes
+    elseif type(p.commits) == "table" then
+      commit_count = #p.commits
+    end
+  end
+  local changed_files = p.changedFiles or 0
+  local additions_str = tostring(p.additions or 0)
+  local deletions_str = tostring(p.deletions or 0)
+  local changes =
+    string.format("+%s -%s (%d files, %d commits)", additions_str, deletions_str, changed_files, commit_count)
+  local changes_start = "Changes: "
+
+  local plus_start = #changes_start
+  local plus_end = plus_start + 1 + #additions_str
+  local minus_start = plus_end + 1
+  local minus_end = minus_start + 1 + #deletions_str
+
+  b:add_line(changes_start .. changes, {
+    { col = 0, end_col = #changes_start - 1, hl = "Comment" },
+    { col = plus_start, end_col = plus_end, hl = "DiffAdd" },
+    { col = minus_start, end_col = minus_end, hl = "DiffDelete" },
+    { col = minus_end + 1, end_col = -1, hl = "Comment" },
+  })
+end
+
+--- Add metadata fields (Author, State, Review, Mergeable, Changes, Labels)
+---@param b MdRender.ContentBuilder
+---@param p Ghsigns.PrData
+local function add_metadata_fields(b, p)
+  if p.author_name then
+    b:add_labeled("Author", p.author_name, "String")
+  end
+
+  if p.state then
+    local state_hl = p.state == "OPEN" and "DiagnosticOk" or "DiagnosticError"
+    b:add_labeled("State", p.state, state_hl)
+  end
+
+  if p.reviewDecision and p.reviewDecision ~= "" then
+    local review_hl = "DiagnosticWarn"
+    if p.reviewDecision == "APPROVED" then
+      review_hl = "DiagnosticOk"
+    elseif p.reviewDecision == "CHANGES_REQUESTED" then
+      review_hl = "DiagnosticError"
+    end
+    b:add_labeled("Review", p.reviewDecision:gsub("_", " "), review_hl)
+  end
+
+  if p.state == "OPEN" and p.mergeable and p.mergeable ~= "" then
+    local merge_hl = p.mergeable == "MERGEABLE" and "DiagnosticOk" or "DiagnosticError"
+    b:add_labeled("Mergeable", p.mergeable, merge_hl)
+  end
+
+  add_changes_line(b, p)
+
+  if p.labels and p.labels.nodes and #p.labels.nodes > 0 then
+    local label_names = vim.tbl_map(function(label)
+      return label.name
+    end, p.labels.nodes)
+    b:add_labeled("Labels", table.concat(label_names, ", "), "Tag")
+  end
+end
+
+--- Add date fields (Created, Updated, Merged)
+---@param b MdRender.ContentBuilder
+---@param p Ghsigns.PrData
+local function add_date_fields(b, p)
+  if p.createdAt then
+    b:add_labeled("Created", format_local_time(p.createdAt), "DiagnosticHint")
+  end
+  if p.updatedAt then
+    b:add_labeled("Updated", format_local_time(p.updatedAt), "DiagnosticHint")
+  end
+  if p.mergedAt then
+    b:add_labeled("Merged", format_local_time(p.mergedAt), "DiagnosticOk")
+  end
+end
+
+--- Build the header section (title, branches, metadata, dates)
+---@param b MdRender.ContentBuilder
+---@param p Ghsigns.PrData
+---@return integer title_line
+---@return string title_text
+local function build_header(b, p)
+  local title_line, title_text = add_title_line(b, p)
+
+  if p.baseRefName and p.headRefName then
+    local branch_info = string.format("%s → %s", p.headRefName, p.baseRefName)
+    b:add_line(branch_info, {
+      { col = 0, end_col = #p.headRefName, hl = "Identifier" },
+      { col = #p.headRefName + 1, end_col = #p.headRefName + 3, hl = "Operator" },
+      { col = #p.headRefName + 4, end_col = -1, hl = "String" },
+    })
+  end
+
+  b:add_line ""
+  add_metadata_fields(b, p)
+  b:add_line ""
+  add_date_fields(b, p)
+
+  return title_line, title_text
+end
+
+--- Build the body section (description with markdown rendering)
+---@param b MdRender.ContentBuilder
+---@param p Ghsigns.PrData
+---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[], fold_state?: table<integer, boolean>, expand_state?: table<integer, boolean> }
+local function build_body(b, p, opts)
+  if not p.body or p.body == "" then
+    return
+  end
+
+  local repo_base_url = nil
+  if p.url then
+    repo_base_url = p.url:match "(https://[^/]+/[^/]+/[^/]+)"
+  end
+
+  b:add_line ""
+  b:add_line("Description:", { { col = 0, end_col = -1, hl = "Comment" } })
+
+  local cleaned_lines = normalize_body(p.body)
+
+  b:render_document(cleaned_lines, {
+    max_width = 80,
+    max_lines = opts and opts.max_body_lines or math.huge,
+    repo_base_url = repo_base_url,
+    autolinks = opts and opts.autolinks,
+    fold_state = opts and opts.fold_state,
+    expand_state = opts and opts.expand_state,
+  })
+end
+
+--- Build the footer section (close button)
+---@param b MdRender.ContentBuilder
+---@return integer close_line_idx
+local function build_footer(b)
+  b:add_line ""
+  local close_text = "✕ Click here to close (or press q/Esc/Enter)"
+  b:add_line(
+    close_text,
+    { { col = 0, end_col = 1, hl = "ErrorMsg" }, { col = 2, end_col = #close_text, hl = "Comment" } }
+  )
+  return #b.lines - 1
+end
 
 --- Build PR content for display (extracted for testability)
 ---@param pr Ghsigns.Pr
 ---@param opts? { max_body_lines?: integer, autolinks?: Ghsigns.Autolink[], fold_state?: table<integer, boolean> }
----@return Ghsigns.PrContent
+---@return MdRender.Content
 PrDisplay.build_pr_content = function(pr, opts)
   local b = ContentBuilder.new()
   local p = prepare_pr_data(pr)
-  local title_line, title_text = b:build_header(p)
-  b:build_body(p, opts)
-  local close_line_idx = b:build_footer()
+  local title_line, title_text = build_header(b, p)
+  build_body(b, p, opts)
+  local close_line_idx = build_footer(b)
   local result = b:result()
   result.title_line = title_line
   result.title_text = title_text
   result.close_line_idx = close_line_idx
   return result
-end
-
---- Set up heading highlight groups (GhsignsH1..GhsignsH6)
---- Links to @markup.heading.N.markdown if available, otherwise falls back to Title
-function PrDisplay.setup_heading_highlights()
-  for level = 1, 6 do
-    local hl_name = "GhsignsH" .. level
-    local ts_name = "@markup.heading." .. level .. ".markdown"
-    local ts_hl = vim.api.nvim_get_hl(0, { name = ts_name, link = false })
-    if ts_hl.fg then
-      vim.api.nvim_set_hl(0, hl_name, { fg = ts_hl.fg, bold = true, default = true })
-    else
-      vim.api.nvim_set_hl(0, hl_name, { link = "Title", default = true })
-    end
-  end
-end
-
---- Set up alert highlight groups (GhsignsAlert* and GhsignsAlert*Bg)
-function PrDisplay.setup_alert_highlights()
-  local normal_hl = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
-  if not normal_hl.bg then
-    normal_hl = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
-  end
-  local normal_bg = normal_hl.bg or 0x1e1e2e
-
-  for name, base_hl_name in pairs(ALERT_HL_BASES) do
-    local base_hl = vim.api.nvim_get_hl(0, { name = base_hl_name, link = false })
-    local fg = base_hl.fg or 0xFFFFFF
-    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name, { fg = fg, bold = true, default = true })
-    vim.api.nvim_set_hl(0, "GhsignsAlert" .. name .. "Bg", { bg = blend_color(fg, normal_bg, 0.1), default = true })
-  end
 end
 
 --- @param pr Ghsigns.Pr
@@ -101,11 +266,7 @@ PrDisplay.show_pr_info = function(pr, opts)
   title_hl.underline = true
   vim.api.nvim_set_hl(0, "GhsignsPrTitle", title_hl)
 
-  -- Obsidian ==highlight== marker
-  vim.api.nvim_set_hl(0, "GhsignsHighlight", { bg = "#3b3600", fg = "#ffec80", default = true })
-
-  PrDisplay.setup_heading_highlights()
-  PrDisplay.setup_alert_highlights()
+  md_render.setup_highlights()
 
   local fold_state = {}
   local expand_state = {}
@@ -131,7 +292,7 @@ PrDisplay.show_pr_info = function(pr, opts)
 
   content = PrDisplay.build_pr_content(pr, opts)
   display_utils.apply_content_to_buffer(buf, ns, content, { title_url = pr.url })
-  local win = display_utils.open_float_window(buf, content, float_win)
+  local win = display_utils.open_float_window(buf, content, float_win, { title = " PR Info " })
 
   -- Initialize fold_state from default fold states
   for _, fold in ipairs(content.callout_folds) do
@@ -307,6 +468,7 @@ end
 -- Exported for testing
 PrDisplay._supports_osc8 = display_utils.supports_osc8
 PrDisplay._reset_osc8_cache = display_utils.reset_osc8_cache
-PrDisplay._blend_color = blend_color
+PrDisplay._blend_color = md_render._blend_color
+PrDisplay._format_local_time = format_local_time
 
 return PrDisplay

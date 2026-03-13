@@ -82,9 +82,20 @@ Lualine.on_click = function(clicks)
   end
 end
 
-local pr_display = require "ghsigns.pr_display"
+Lualine.show_pr_info = function(pr, opts)
+  local ok, pr_display = pcall(require, "ghsigns.pr_display")
+  if ok then
+    pr_display.show_pr_info(pr, opts)
+  else
+    -- Fallback when md-render.nvim is not installed: open PR in browser
+    vim.notify("md-render.nvim not installed. Opening PR in browser.", vim.log.levels.INFO)
+    vim.ui.open(pr.url)
+  end
+end
 
-Lualine.build_pr_content = pr_display.build_pr_content
-Lualine.show_pr_info = pr_display.show_pr_info
+Lualine.build_pr_content = function(pr, opts)
+  local pr_display = require "ghsigns.pr_display"
+  return pr_display.build_pr_content(pr, opts)
+end
 
 return Lualine

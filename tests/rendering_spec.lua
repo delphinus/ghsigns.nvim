@@ -6,14 +6,12 @@ describe("PR content rendering", function()
 
   before_each(function()
     package.loaded["ghsigns.pr_display"] = nil
-    package.loaded["ghsigns.content_builder"] = nil
     pr_display = require "ghsigns.pr_display"
-    format_local_time = require("ghsigns.content_builder").format_local_time
+    format_local_time = pr_display._format_local_time
   end)
 
   after_each(function()
     package.loaded["ghsigns.pr_display"] = nil
-    package.loaded["ghsigns.content_builder"] = nil
   end)
 
   -- Helper to build content with a body using minimal PR fields
@@ -312,8 +310,8 @@ describe("PR content rendering", function()
       local c = build_with_body "## Section Title"
       eq("  ○ Section Title", c.lines[7])
       local hls = hl_for_line(c, 6)
-      eq("GhsignsH2", hls[1].hl)
-      eq("GhsignsH2", hls[2].hl)
+      eq("MdRenderH2", hls[1].hl)
+      eq("MdRenderH2", hls[2].hl)
     end)
 
     it("should render **bold** with Bold highlight", function()
@@ -1062,13 +1060,13 @@ All 21 tests pass:
     it("should have correct body highlights", function()
       -- "Summary" heading (○ = 3 bytes + space = 4 bytes prefix)
       local summary_hls = hl_for_line(pr4_content, 12)
-      eq("GhsignsH2", summary_hls[1].hl)
-      eq("GhsignsH2", summary_hls[2].hl)
+      eq("MdRenderH2", summary_hls[1].hl)
+      eq("MdRenderH2", summary_hls[2].hl)
       -- Bold "ghsigns.nvim" in line 13
       eq({ { col = 35, end_col = 47, hl = "Bold" } }, hl_for_line(pr4_content, 13))
       -- "Motivation" heading
       local motivation_hls = hl_for_line(pr4_content, 19)
-      eq("GhsignsH2", motivation_hls[1].hl)
+      eq("MdRenderH2", motivation_hls[1].hl)
       -- Blockquote on line 20 (first wrapped blockquote line)
       local bq_hl = hl_for_line(pr4_content, 20)
       assert.is_not_nil(bq_hl)
@@ -1326,11 +1324,11 @@ All 21 tests pass:
       local c = build_with_body "> [!NOTE]\n> Content"
       local header_hl = hl_for_line(c, 6)
       assert.is_not_nil(header_hl)
-      -- Border should use GhsignsAlertNote instead of FloatBorder
+      -- Border should use MdRenderAlertNote instead of FloatBorder
       local found_alert_hl = false
       local found_float_border = false
       for _, g in ipairs(header_hl) do
-        if g.hl == "GhsignsAlertNote" then
+        if g.hl == "MdRenderAlertNote" then
           found_alert_hl = true
         end
         if g.hl == "FloatBorder" then
@@ -1348,7 +1346,7 @@ All 21 tests pass:
       assert.is_not_nil(header_hl)
       local found_bg = false
       for _, g in ipairs(header_hl) do
-        if g.hl == "GhsignsAlertWarningBg" and g.hl_eol == true then
+        if g.hl == "MdRenderAlertWarningBg" and g.hl_eol == true then
           found_bg = true
         end
       end
@@ -1358,7 +1356,7 @@ All 21 tests pass:
       assert.is_not_nil(content_hl)
       found_bg = false
       for _, g in ipairs(content_hl) do
-        if g.hl == "GhsignsAlertWarningBg" and g.hl_eol == true then
+        if g.hl == "MdRenderAlertWarningBg" and g.hl_eol == true then
           found_bg = true
         end
       end
@@ -1369,10 +1367,10 @@ All 21 tests pass:
       local c = build_with_body "> [!TIP]\n> Some tip."
       local header_hl = hl_for_line(c, 6)
       assert.is_not_nil(header_hl)
-      -- Should have GhsignsAlertTip for the icon+label text (after bar)
+      -- Should have MdRenderAlertTip for the icon+label text (after bar)
       local found_content_hl = false
       for _, g in ipairs(header_hl) do
-        if g.hl == "GhsignsAlertTip" and g.col > 0 and not g.hl_eol then
+        if g.hl == "MdRenderAlertTip" and g.col > 0 and not g.hl_eol then
           found_content_hl = true
         end
       end
@@ -1394,7 +1392,7 @@ All 21 tests pass:
       local bq_hl = hl_for_line(c, bq_line_idx)
       if bq_hl then
         for _, g in ipairs(bq_hl) do
-          assert.is_nil(g.hl:match "GhsignsAlert")
+          assert.is_nil(g.hl:match "MdRenderAlert")
         end
       end
     end)
@@ -1408,14 +1406,14 @@ All 21 tests pass:
         local found = false
         for _, hl_info in ipairs(c.highlights) do
           for _, g in ipairs(hl_info.groups) do
-            if g.hl == "GhsignsAlert" .. name then
+            if g.hl == "MdRenderAlert" .. name then
               found = true
               break
             end
           end
           if found then break end
         end
-        assert.is_true(found, "Expected GhsignsAlert" .. name .. " highlight")
+        assert.is_true(found, "Expected MdRenderAlert" .. name .. " highlight")
       end
     end)
 
@@ -1427,7 +1425,7 @@ All 21 tests pass:
         assert.is_not_nil(hl)
         local found_bg = false
         for _, g in ipairs(hl) do
-          if g.hl == "GhsignsAlertCautionBg" and g.hl_eol == true then
+          if g.hl == "MdRenderAlertCautionBg" and g.hl_eol == true then
             found_bg = true
           end
         end
@@ -1583,7 +1581,7 @@ All 21 tests pass:
       assert.is_not_nil(hl)
       local found_bg = false
       for _, g in ipairs(hl) do
-        if g.hl == "GhsignsAlertNoteBg" and g.hl_eol == true then
+        if g.hl == "MdRenderAlertNoteBg" and g.hl_eol == true then
           found_bg = true
         end
       end

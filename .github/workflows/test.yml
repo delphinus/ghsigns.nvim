@@ -25,7 +25,12 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/nvim-lua/plenary.nvim /tmp/plenary.nvim
 
+      - name: Clone md-render.nvim
+        run: |
+          git clone --depth=1 https://github.com/delphinus/md-render.nvim /tmp/md-render.nvim
+
       - name: Run tests
         run: |
           export PLENARY_DIR=/tmp/plenary.nvim
+          export MD_RENDER_DIR=/tmp/md-render.nvim
           make test

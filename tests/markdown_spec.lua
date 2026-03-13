@@ -5,32 +5,32 @@ describe("Markdown rendering", function()
 
   before_each(function()
     -- Load the markdown module
-    markdown = require "ghsigns.markdown"
+    markdown = require "md-render.markdown"
   end)
 
   describe("Headings", function()
-    it("should render h1 with icon and GhsignsH1 highlight", function()
+    it("should render h1 with icon and MdRenderH1 highlight", function()
       local text, highlights, links, special_type = markdown.render("# Heading")
       eq("◉ Heading", text)
       eq("heading", special_type)
       eq(2, #highlights)
-      eq({ col = 0, end_col = #"◉ ", hl = "GhsignsH1" }, highlights[1])
-      eq({ col = #"◉ ", end_col = #"◉ Heading", hl = "GhsignsH1" }, highlights[2])
+      eq({ col = 0, end_col = #"◉ ", hl = "MdRenderH1" }, highlights[1])
+      eq({ col = #"◉ ", end_col = #"◉ Heading", hl = "MdRenderH1" }, highlights[2])
     end)
 
-    it("should render h2 with icon and GhsignsH2 highlight", function()
+    it("should render h2 with icon and MdRenderH2 highlight", function()
       local text, highlights, links, special_type = markdown.render("## Heading 2")
       eq("○ Heading 2", text)
       eq("heading", special_type)
       eq(2, #highlights)
-      eq("GhsignsH2", highlights[1].hl)
+      eq("MdRenderH2", highlights[1].hl)
     end)
 
-    it("should render h3 with icon and GhsignsH3 highlight", function()
+    it("should render h3 with icon and MdRenderH3 highlight", function()
       local text, highlights, links, special_type = markdown.render("### Heading 3")
       eq("◆ Heading 3", text)
       eq("heading", special_type)
-      eq("GhsignsH3", highlights[1].hl)
+      eq("MdRenderH3", highlights[1].hl)
     end)
   end)
 
@@ -306,12 +306,12 @@ describe("Markdown rendering", function()
   end)
 
   describe("Highlight markers", function()
-    it("should remove == markers and add GhsignsHighlight", function()
+    it("should remove == markers and add MdRenderHighlight", function()
       local text, highlights = markdown.render("This is ==highlighted== text")
       eq("This is highlighted text", text)
       local hl = nil
       for _, h in ipairs(highlights) do
-        if h.hl == "GhsignsHighlight" then
+        if h.hl == "MdRenderHighlight" then
           hl = h
           break
         end
@@ -325,7 +325,7 @@ describe("Markdown rendering", function()
       eq("foo and bar", text)
       local hl_count = 0
       for _, h in ipairs(highlights) do
-        if h.hl == "GhsignsHighlight" then
+        if h.hl == "MdRenderHighlight" then
           hl_count = hl_count + 1
         end
       end
@@ -337,7 +337,7 @@ describe("Markdown rendering", function()
       eq("a = b = c", text)
       local hl_count = 0
       for _, h in ipairs(highlights) do
-        if h.hl == "GhsignsHighlight" then
+        if h.hl == "MdRenderHighlight" then
           hl_count = hl_count + 1
         end
       end
