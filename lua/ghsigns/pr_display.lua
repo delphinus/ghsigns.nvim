@@ -39,13 +39,37 @@ local function format_local_time(iso_str)
   return os.date("%Y-%m-%d %H:%M:%S %Z", t + offset)
 end
 
---- Normalize body text: fix line endings, strip HTML, compress blank lines
+--- HTML tags that md-render.nvim can render (block-level and inline).
+--- Tags not in this set are stripped so they don't appear as raw text.
+local MD_RENDER_HTML_TAGS = {
+  -- block-level (content_builder.render_document)
+  details = true, summary = true,
+  figure = true, figcaption = true,
+  dl = true, dt = true, dd = true,
+  h1 = true, h2 = true, h3 = true, h4 = true, h5 = true, h6 = true,
+  hr = true, br = true,
+  -- inline (markdown.render)
+  b = true, strong = true,
+  i = true, em = true,
+  s = true, del = true, strike = true,
+  code = true, u = true, mark = true, kbd = true,
+  sub = true, sup = true,
+  a = true, img = true,
+}
+
+--- Normalize body text: fix line endings, strip unsupported HTML, compress blank lines
 ---@param body string
 ---@return string[]
 local function normalize_body(body)
   local text = body:gsub("\r\n", "\n"):gsub("\r", "\n")
   text = text:gsub("<!%-%-.-%-%->", "")
-  text = text:gsub("<[^>]+>", "")
+  text = text:gsub("<[^>]+>", function(tag)
+    local name = tag:match "</?(%w+)"
+    if name and MD_RENDER_HTML_TAGS[name:lower()] then
+      return tag
+    end
+    return ""
+  end)
 
   local raw_lines = vim.split(text, "\n")
   local cleaned = {}

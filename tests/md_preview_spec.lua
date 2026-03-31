@@ -38,14 +38,14 @@ describe("Markdown Preview content rendering", function()
   describe("Headings", function()
     it("should render h2 heading with icon and MdRenderH2 highlight", function()
       local c = md_preview.build_content { "## My Heading" }
-      eq("  ○ My Heading", c.lines[1])
+      eq("  󰉬  My Heading", c.lines[1])
       local hls = hl_for_line(c, 0)
       eq("MdRenderH2", hls[1].hl)
     end)
 
     it("should render h1 heading with icon and MdRenderH1 highlight", function()
       local c = md_preview.build_content { "# Top Level" }
-      eq("  ◉ Top Level", c.lines[1])
+      eq("  󰉫  Top Level", c.lines[1])
       local hls = hl_for_line(c, 0)
       eq("MdRenderH1", hls[1].hl)
     end)
@@ -57,7 +57,7 @@ describe("Markdown Preview content rendering", function()
       }
       eq("  Some text", c.lines[1])
       eq("  ", c.lines[2])
-      eq("  ○ Heading", c.lines[3])
+      eq("  󰉬  Heading", c.lines[3])
     end)
 
     it("should skip blank lines immediately after headings", function()
@@ -66,7 +66,7 @@ describe("Markdown Preview content rendering", function()
         "",
         "Paragraph",
       }
-      eq("  ○ Heading", c.lines[1])
+      eq("  󰉬  Heading", c.lines[1])
       eq("  Paragraph", c.lines[2])
     end)
 
@@ -77,11 +77,11 @@ describe("Markdown Preview content rendering", function()
         "### hoge3",
         "content",
       }
-      eq("  ◉ hoge1", c.lines[1])
+      eq("  󰉫  hoge1", c.lines[1])
       eq("  ", c.lines[2])
-      eq("  ○ hoge2", c.lines[3])
+      eq("  󰉬  hoge2", c.lines[3])
       eq("  ", c.lines[4])
-      eq("  ◆ hoge3", c.lines[5])
+      eq("  󰉭  hoge3", c.lines[5])
       eq("  content", c.lines[6])
     end)
 
@@ -94,11 +94,11 @@ describe("Markdown Preview content rendering", function()
         "### hoge3",
         "content",
       }
-      eq("  ◉ hoge1", c.lines[1])
+      eq("  󰉫  hoge1", c.lines[1])
       eq("  ", c.lines[2])
-      eq("  ○ hoge2", c.lines[3])
+      eq("  󰉬  hoge2", c.lines[3])
       eq("  ", c.lines[4])
-      eq("  ◆ hoge3", c.lines[5])
+      eq("  󰉭  hoge3", c.lines[5])
       eq("  content", c.lines[6])
     end)
 
@@ -112,7 +112,7 @@ describe("Markdown Preview content rendering", function()
       }
       eq("  content", c.lines[1])
       eq("  ", c.lines[2])
-      eq("  ○ Heading", c.lines[3])
+      eq("  󰉬  Heading", c.lines[3])
       eq(3, #c.lines)
     end)
   end)
@@ -123,7 +123,7 @@ describe("Markdown Preview content rendering", function()
         "Top Level",
         "=========",
       }
-      eq("  ◉ Top Level", c.lines[1])
+      eq("  󰉫  Top Level", c.lines[1])
       eq(1, #c.lines)
       local hls = hl_for_line(c, 0)
       eq("MdRenderH1", hls[1].hl)
@@ -134,7 +134,7 @@ describe("Markdown Preview content rendering", function()
         "License",
         "-------",
       }
-      eq("  ○ License", c.lines[1])
+      eq("  󰉬  License", c.lines[1])
       eq(1, #c.lines)
       local hls = hl_for_line(c, 0)
       eq("MdRenderH2", hls[1].hl)
@@ -152,7 +152,7 @@ describe("Markdown Preview content rendering", function()
       -- Blank lines adjacent to headings are skipped, but one is auto-inserted before
       eq("  Some text", c.lines[1])
       eq("  ", c.lines[2]) -- auto-inserted blank before heading
-      eq("  ○ Features", c.lines[3])
+      eq("  󰉬  Features", c.lines[3])
       -- Blank line after heading is skipped
       eq("  More text", c.lines[4])
       eq(4, #c.lines)
@@ -422,12 +422,22 @@ describe("Markdown Preview content rendering", function()
   ---------------------------------------------------------------------------
   describe("No truncation", function()
     it("should not truncate content regardless of length", function()
+      -- Use blank lines between paragraphs to ensure each is a separate line
       local lines = {}
       for i = 1, 50 do
         table.insert(lines, "Line " .. i)
+        table.insert(lines, "")
       end
+      -- Remove last empty line
+      table.remove(lines)
       local c = md_preview.build_content(lines)
-      eq(50, #c.lines)
+      -- 50 paragraphs with blank lines between, but consecutive blank lines
+      -- are compressed and blank lines after the last paragraph are removed
+      -- All 50 "Line N" entries should be present
+      local all_text = table.concat(c.lines, "\n")
+      for i = 1, 50 do
+        assert.is_truthy(all_text:match("Line " .. i), "Expected Line " .. i .. " to be present")
+      end
       -- No "... (truncated)" line
       for _, line in ipairs(c.lines) do
         assert.is_not.truthy(line:match "truncated")
@@ -464,7 +474,7 @@ describe("Markdown Preview content rendering", function()
         "> A quote",
       }
 
-      eq("  ○ Title", c.lines[1])
+      eq("  󰉬  Title", c.lines[1])
       -- paragraph
       assert.is_truthy(c.lines[2]:match "A paragraph")
       -- list

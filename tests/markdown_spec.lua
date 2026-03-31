@@ -11,24 +11,23 @@ describe("Markdown rendering", function()
   describe("Headings", function()
     it("should render h1 with icon and MdRenderH1 highlight", function()
       local text, highlights, links, special_type = markdown.render("# Heading")
-      eq("◉ Heading", text)
+      eq("󰉫  Heading", text)
       eq("heading", special_type)
-      eq(2, #highlights)
-      eq({ col = 0, end_col = #"◉ ", hl = "MdRenderH1" }, highlights[1])
-      eq({ col = #"◉ ", end_col = #"◉ Heading", hl = "MdRenderH1" }, highlights[2])
+      eq(1, #highlights)
+      eq({ col = 0, end_col = #"󰉫  Heading", hl = "MdRenderH1" }, highlights[1])
     end)
 
     it("should render h2 with icon and MdRenderH2 highlight", function()
       local text, highlights, links, special_type = markdown.render("## Heading 2")
-      eq("○ Heading 2", text)
+      eq("󰉬  Heading 2", text)
       eq("heading", special_type)
-      eq(2, #highlights)
+      eq(1, #highlights)
       eq("MdRenderH2", highlights[1].hl)
     end)
 
     it("should render h3 with icon and MdRenderH3 highlight", function()
       local text, highlights, links, special_type = markdown.render("### Heading 3")
-      eq("◆ Heading 3", text)
+      eq("󰉭  Heading 3", text)
       eq("heading", special_type)
       eq("MdRenderH3", highlights[1].hl)
     end)
@@ -378,7 +377,7 @@ describe("Markdown rendering", function()
       eq("See my page", text)
       local hl = nil
       for _, h in ipairs(highlights) do
-        if h.hl == "Underlined" then
+        if h.hl == "MdRenderLinkObsidian" or h.hl == "Underlined" then
           hl = h
           break
         end
@@ -386,7 +385,7 @@ describe("Markdown rendering", function()
       assert.is_not_nil(hl)
       eq("my page", text:sub(hl.col + 1, hl.end_col))
       eq(1, #links)
-      eq("obsidian://open?file=my page", links[1].url)
+      eq("obsidian://advanced-uri?filepath=my page", links[1].url)
     end)
 
     it("should render wikilink with display text", function()
@@ -431,7 +430,7 @@ describe("Markdown rendering", function()
       local text, highlights, links = markdown.render("![[my-note]]")
       eq("📎 my-note", text)
       eq(1, #links)
-      eq("obsidian://open?file=my-note", links[1].url)
+      eq("obsidian://advanced-uri?filepath=my-note", links[1].url)
     end)
 
     it("should render image embed with image icon", function()
@@ -507,7 +506,7 @@ describe("Markdown rendering", function()
   describe("GitHub Alerts", function()
     it("should convert > [!NOTE] to icon + label", function()
       local text, highlights, links, special_type, list_marker, alert_type = markdown.render("> [!NOTE]")
-      eq("│ 󰋽 Note", text)
+      eq("│ 󰋽  Note", text)
       eq("blockquote", special_type)
       eq("NOTE", alert_type)
       eq({ col = 0, end_col = #"│ ", hl = "FloatBorder" }, highlights[1])
@@ -515,11 +514,11 @@ describe("Markdown rendering", function()
 
     it("should return correct alert_type for all 5 types", function()
       local types = {
-        { input = "> [!NOTE]", label = "󰋽 Note", alert = "NOTE" },
-        { input = "> [!TIP]", label = "󰌶 Tip", alert = "TIP" },
-        { input = "> [!IMPORTANT]", label = "󰅾 Important", alert = "IMPORTANT" },
-        { input = "> [!WARNING]", label = "󰀪 Warning", alert = "WARNING" },
-        { input = "> [!CAUTION]", label = "󰳦 Caution", alert = "CAUTION" },
+        { input = "> [!NOTE]", label = "󰋽  Note", alert = "NOTE" },
+        { input = "> [!TIP]", label = "󰌶  Tip", alert = "TIP" },
+        { input = "> [!IMPORTANT]", label = "󰅾  Important", alert = "IMPORTANT" },
+        { input = "> [!WARNING]", label = "󰀪  Warning", alert = "WARNING" },
+        { input = "> [!CAUTION]", label = "󰳦  Caution", alert = "CAUTION" },
       }
       for _, t in ipairs(types) do
         local text, _, _, _, _, alert_type = markdown.render(t.input)
@@ -530,42 +529,42 @@ describe("Markdown rendering", function()
 
     it("should render unknown callout types with generic style", function()
       local text, highlights, links, special_type, _, alert_type = markdown.render("> [!UNKNOWN]")
-      eq("│ ❝ Unknown", text)
+      eq("│ ❝  Unknown", text)
       eq("blockquote", special_type)
       eq("NOTE", alert_type) -- falls back to NOTE style
     end)
 
     it("should render unknown callout types with custom title", function()
       local text, _, _, _, _, alert_type = markdown.render("> [!terminal] Git checkout")
-      eq("│ ❝ Git checkout", text)
+      eq("│ ❝  Git checkout", text)
       eq("NOTE", alert_type)
     end)
 
     it("should render unknown foldable callout types", function()
       local text, _, _, _, _, alert_type, fold_mod = markdown.render("> [!file]- Edit: foo.lua")
-      eq("│ ❝ Edit: foo.lua", text)
+      eq("│ ❝  Edit: foo.lua", text)
       eq("NOTE", alert_type)
       eq("-", fold_mod)
     end)
 
     it("should render callout with custom title", function()
       local text, highlights, links, special_type, _, alert_type = markdown.render("> [!NOTE] My Custom Title")
-      eq("│ 󰋽 My Custom Title", text)
+      eq("│ 󰋽  My Custom Title", text)
       eq("blockquote", special_type)
       eq("NOTE", alert_type)
     end)
 
     it("should render Obsidian-specific alert types", function()
       local obsidian_types = {
-        { input = "> [!BUG]", label = "󱈰 Bug", alert = "BUG" },
-        { input = "> [!EXAMPLE]", label = "󰆹 Example", alert = "EXAMPLE" },
-        { input = "> [!QUOTE]", label = "󱗝 Quote", alert = "QUOTE" },
-        { input = "> [!TODO]", label = "󰄬 Todo", alert = "TODO" },
-        { input = "> [!SUCCESS]", label = "󰄬 Success", alert = "SUCCESS" },
-        { input = "> [!QUESTION]", label = "󱈅 Question", alert = "QUESTION" },
-        { input = "> [!FAILURE]", label = "󰅙 Failure", alert = "FAILURE" },
-        { input = "> [!DANGER]", label = "󱐌 Danger", alert = "DANGER" },
-        { input = "> [!ABSTRACT]", label = "󱉫 Abstract", alert = "ABSTRACT" },
+        { input = "> [!BUG]", label = "󱈰  Bug", alert = "BUG" },
+        { input = "> [!EXAMPLE]", label = "󰆹  Example", alert = "EXAMPLE" },
+        { input = "> [!QUOTE]", label = "󱗝  Quote", alert = "QUOTE" },
+        { input = "> [!TODO]", label = "󰄬  Todo", alert = "TODO" },
+        { input = "> [!SUCCESS]", label = "󰄬  Success", alert = "SUCCESS" },
+        { input = "> [!QUESTION]", label = "󱈅  Question", alert = "QUESTION" },
+        { input = "> [!FAILURE]", label = "󰅙  Failure", alert = "FAILURE" },
+        { input = "> [!DANGER]", label = "󱐌  Danger", alert = "DANGER" },
+        { input = "> [!ABSTRACT]", label = "󱉫  Abstract", alert = "ABSTRACT" },
       }
       for _, t in ipairs(obsidian_types) do
         local text, _, _, _, _, alert_type = markdown.render(t.input)
@@ -576,13 +575,13 @@ describe("Markdown rendering", function()
 
     it("should resolve alias types to parent style", function()
       local aliases = {
-        { input = "> [!TLDR]", label = "󱉫 TL;DR", style = "ABSTRACT" },
-        { input = "> [!INFO]", label = "󰋽 Info", style = "NOTE" },
-        { input = "> [!DONE]", label = "󰄬 Done", style = "SUCCESS" },
-        { input = "> [!HELP]", label = "󱈅 Help", style = "QUESTION" },
-        { input = "> [!FAIL]", label = "󰅙 Fail", style = "FAILURE" },
-        { input = "> [!ERROR]", label = "󱐌 Error", style = "DANGER" },
-        { input = "> [!CITE]", label = "󱗝 Cite", style = "QUOTE" },
+        { input = "> [!TLDR]", label = "󱉫  TL;DR", style = "ABSTRACT" },
+        { input = "> [!INFO]", label = "󰋽  Info", style = "NOTE" },
+        { input = "> [!DONE]", label = "󰄬  Done", style = "SUCCESS" },
+        { input = "> [!HELP]", label = "󱈅  Help", style = "QUESTION" },
+        { input = "> [!FAIL]", label = "󰅙  Fail", style = "FAILURE" },
+        { input = "> [!ERROR]", label = "󱐌  Error", style = "DANGER" },
+        { input = "> [!CITE]", label = "󱗝  Cite", style = "QUOTE" },
       }
       for _, t in ipairs(aliases) do
         local text, _, _, _, _, alert_type = markdown.render(t.input)
@@ -593,34 +592,34 @@ describe("Markdown rendering", function()
 
     it("should match case-insensitively", function()
       local text, _, _, _, _, alert_type = markdown.render("> [!note]")
-      eq("│ 󰋽 Note", text)
+      eq("│ 󰋽  Note", text)
       eq("NOTE", alert_type)
     end)
 
     it("should parse foldable callout with - modifier", function()
       local text, _, _, _, _, alert_type, fold_mod = markdown.render("> [!NOTE]-")
-      eq("│ 󰋽 Note", text)
+      eq("│ 󰋽  Note", text)
       eq("NOTE", alert_type)
       eq("-", fold_mod)
     end)
 
     it("should parse foldable callout with + modifier", function()
       local text, _, _, _, _, alert_type, fold_mod = markdown.render("> [!WARNING]+")
-      eq("│ 󰀪 Warning", text)
+      eq("│ 󰀪  Warning", text)
       eq("WARNING", alert_type)
       eq("+", fold_mod)
     end)
 
     it("should parse foldable callout with modifier and custom title", function()
       local text, _, _, _, _, alert_type, fold_mod = markdown.render("> [!TIP]- Click to expand")
-      eq("│ 󰌶 Click to expand", text)
+      eq("│ 󰌶  Click to expand", text)
       eq("TIP", alert_type)
       eq("-", fold_mod)
     end)
 
     it("should parse foldable callout with + modifier and custom title", function()
       local text, _, _, _, _, alert_type, fold_mod = markdown.render("> [!CAUTION]+ Expandable")
-      eq("│ 󰳦 Expandable", text)
+      eq("│ 󰳦  Expandable", text)
       eq("CAUTION", alert_type)
       eq("+", fold_mod)
     end)
