@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-03-31
+
+### Fixed
+
+- `<details>` blocks in PR descriptions are now rendered as collapsible
+  sections instead of being stripped
+
+### Changed
+
+- preserve all HTML tags that md-render.nvim supports (`<details>`,
+  `<summary>`, `<figure>`, `<dl>`/`<dt>`/`<dd>`, `<h1>`–`<h6>`, `<hr>`,
+  `<br>`, `<b>`, `<strong>`, `<i>`, `<em>`, `<s>`, `<del>`, `<code>`,
+  `<u>`, `<mark>`, `<kbd>`, `<sub>`, `<sup>`, `<a>`, `<img>`) in PR body
+  rendering, enabling full md-render.nvim capabilities
+- update tests to match latest md-render.nvim output (heading icons,
+  alert spacing, etc.)
+
 ## [2.0.1] - 2026-03-13
 
 ### Documentation
