@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-04-01
+
+### Added
+
+- display images in PR Info floating window via Kitty Graphics Protocol
+- authenticated image download for GitHub Enterprise using `gh auth token`
+
+### Fixed
+
+- corrupt image cache files (e.g. HTTP error pages) are now validated
+  and automatically cleaned up (requires md-render.nvim v2.31.0+)
+
 ## [2.1.0] - 2026-03-31
 
 ### Fixed
