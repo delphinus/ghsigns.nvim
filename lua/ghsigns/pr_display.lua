@@ -297,6 +297,8 @@ PrDisplay.show_pr_info = function(pr, opts)
   opts = opts or {}
   local content
 
+  local image_state
+
   local function rebuild()
     opts.fold_state = fold_state
     opts.expand_state = expand_state
@@ -312,11 +314,41 @@ PrDisplay.show_pr_info = function(pr, opts)
     end
     vim.api.nvim_set_option_value("wrap", not any_expanded, { win = win })
     content = new_content
+    image_state = display_utils.update_images(image_state, win, content)
   end
 
   content = PrDisplay.build_pr_content(pr, opts)
   display_utils.apply_content_to_buffer(buf, ns, content, { title_url = pr.url })
   local win = display_utils.open_float_window(buf, content, float_win, { title = " PR Info " })
+
+  -- Register authenticated downloader for GitHub Enterprise image URLs
+  PrDisplay._setup_ghe_downloader(pr.url)
+
+  -- Display images (transmit + put with auto-redraw on scroll).
+  -- Use on_download callback to rebuild content with actual image dimensions
+  -- after URL images finish downloading.
+  local download_rebuild_timer
+  image_state = display_utils.setup_images(win, content, function()
+    if download_rebuild_timer then
+      download_rebuild_timer:stop()
+    end
+    download_rebuild_timer = vim.defer_fn(function()
+      download_rebuild_timer = nil
+      if vim.api.nvim_win_is_valid(win) then
+        rebuild()
+      end
+    end, 150)
+  end, ns)
+
+  -- Clean up images when the float window closes
+  vim.api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(win),
+    once = true,
+    callback = function()
+      display_utils.cleanup_images(image_state)
+      image_state = nil
+    end,
+  })
 
   -- Initialize fold_state from default fold states
   for _, fold in ipairs(content.callout_folds) do
@@ -487,6 +519,55 @@ PrDisplay.show_demo = function()
       { key_prefix = "JIRA-", url_template = "https://jira.example.com/browse/JIRA-<num>" },
     },
   })
+end
+
+--- Register a custom image downloader for GitHub Enterprise URLs.
+--- Detects the hostname from the PR URL and, for non-github.com hosts,
+--- uses `gh auth token` to obtain a token and downloads with authorization.
+---@param pr_url string
+function PrDisplay._setup_ghe_downloader(pr_url)
+  local hostname = pr_url:match("https://([^/]+)/")
+  if not hostname or hostname == "github.com" then
+    return
+  end
+
+  local image = require("md-render.image")
+  image.set_download_fn(function(url, output_path, callback)
+    local url_host = url:match("https://([^/]+)/")
+    if url_host ~= hostname then
+      return false
+    end
+
+    -- Get auth token from gh CLI
+    vim.system(
+      { "gh", "auth", "token", "--hostname", hostname },
+      { text = true },
+      function(token_result)
+        if token_result.code ~= 0 or not token_result.stdout then
+          vim.schedule(function() callback(false) end)
+          return
+        end
+        local token = vim.trim(token_result.stdout)
+
+        -- Download with authorization header
+        vim.system(
+          {
+            "curl", "-sfL",
+            "--max-time", "10",
+            "--max-filesize", "20000000",
+            "-H", "Authorization: token " .. token,
+            "-o", output_path,
+            url,
+          },
+          { text = true },
+          function(result)
+            callback(result.code == 0)
+          end
+        )
+      end
+    )
+    return true
+  end)
 end
 
 -- Exported for testing
